@@ -25,8 +25,15 @@ jobs:
             packcmd: pnpm -F desktop pack:win:7z:x64
             artifact: build/*.7z
           - os: macos-latest
-            platform: mac
+            platform: mac-arm64
             packcmd: pnpm -F desktop pack:mac:dmg:arm64
+            artifact: |
+              build/*.dmg
+              build/*.zip
+          # Intel 芯片 mac(x86_64):macos runner 交叉打 x64,better-sqlite3 走 x64 prebuild
+          - os: macos-latest
+            platform: mac-x64
+            packcmd: pnpm -F desktop pack:mac:dmg
             artifact: |
               build/*.dmg
               build/*.zip
