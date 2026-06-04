@@ -178,7 +178,8 @@
   type HeroMenuAction = 'multiSelect' | 'downloadAll'
   const heroMenus: MenuList<HeroMenuAction> = [
     { action: 'multiSelect', label: '批量选择' },
-    { action: 'downloadAll', label: '下载全部' },
+    // 下载全部仅 desktop(web 在线听不下载)
+    import.meta.env.VITE_IS_DESKTOP ? { action: 'downloadAll', label: '下载全部' } : null,
   ]
   const openHeroMenu = (e: MouseEvent) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
@@ -450,7 +451,9 @@
         <p>共 {loveMusics.length} 首</p>
         <div class="hero-actions">
           <button type="button" class="primary-action" onclick={playLikedAll}>播放全部</button>
-          <button type="button" onclick={downloadLikedAll}>下载</button>
+          {#if import.meta.env.VITE_IS_DESKTOP}
+            <button type="button" onclick={downloadLikedAll}>下载</button>
+          {/if}
           <button type="button" onclick={openHeroMenu}>•••</button>
         </div>
       </div>

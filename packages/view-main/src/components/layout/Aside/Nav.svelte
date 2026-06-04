@@ -57,7 +57,8 @@
         name: $t('download'),
         icon: '#icon-download-2',
         iconSize: '0 0 425.2 425.2',
-        enable: true,
+        // 下载是桌面专属(web 在线听,不写本地文件)
+        enable: !!import.meta.env.VITE_IS_DESKTOP,
       },
       {
         to: '/settings',
