@@ -1,19 +1,13 @@
 <script>
-  import Logo from './Logo.svelte'
   import Nav from './Nav.svelte'
   import MyList from './MyList/index.svelte'
-  // import { useSettingValue } from '@/modules/setting/reactive.svelte'
-  // export let params = {}
-
-  // console.log(params)
 </script>
 
 <div class="aside">
   {#if import.meta.env.VITE_IS_MAC}
     <div class="drag-no-any-modal" style="padding-top: calc(env(titlebar-area-height, 30px) + 4px)"></div>
-  {/if}
-  {#if !import.meta.env.VITE_IS_MAC}
-    <Logo />
+  {:else}
+    <div style="height: 12px"></div>
   {/if}
   <Nav />
   <MyList />
