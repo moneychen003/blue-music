@@ -39,8 +39,7 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10.34.1
+        # 不指定 version,自动读 package.json 的 packageManager 字段(避免版本冲突报错)
 
       - name: Setup Node
         uses: actions/setup-node@v4
