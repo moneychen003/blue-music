@@ -1,0 +1,7 @@
+{
+  "name": "@shared/i18n",
+  "main": "index.ts",
+  "devDependencies": {
+    "@any-listen/eslint": "workspace:@shared/eslint@*"
+  }
+}

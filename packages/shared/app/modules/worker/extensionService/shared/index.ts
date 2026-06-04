@@ -1,0 +1,563 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-condition */
+import fs from 'node:fs'
+
+import { EXTENSION, EXTENSION_ENGINE } from '@any-listen/common/constants'
+import { compareVersions, generateId, isUrl, throttle } from '@any-listen/common/utils'
+import {
+  basename,
+  checkFile,
+  checkPath,
+  copyFile,
+  createDir,
+  dirname,
+  extname,
+  extnameRaw,
+  fileSha256,
+  getFileStats,
+  joinPath,
+  removePath,
+  renamePath,
+  toSha256,
+} from '@any-listen/nodejs'
+import { simpleDownload } from '@any-listen/nodejs/download'
+import { readLastLines } from '@any-listen/nodejs/logs'
+import { eachMirror } from '@any-listen/nodejs/mirrorReuqest'
+import { verifySignature } from '@any-listen/nodejs/sign'
+
+import { extensionEvent } from '../event'
+import { i18n } from '../i18n'
+import { loadExtension as loadExtensionByInternalExtension } from '../internalExtension'
+import { extensionState } from '../state'
+import { createVmConetxt, destroyContext, runExtension, setupVmContext } from '../vm'
+import { handlePreloadCall } from '../vm/hostContext/hostFuncs'
+import { sendConfigUpdatedEvent } from '../vm/hostContext/preloadFuncs'
+import { getConfig, saveConfig, unloadConfig } from './configStore'
+import { verifyManifest } from './manifest'
+
+const FILE_EXT_NAME = `.${EXTENSION.pkgExtName}`
+const FILE_EXT_NAME_EXP = new RegExp(`\\.${EXTENSION.pkgExtName}$`, 'i')
+
+export const parseExtension = async (extensionPath: string): Promise<AnyListen.Extension.Extension | null> => {
+  const manifest = await fs.promises
+    .readFile(joinPath(extensionPath, EXTENSION.mainifestName))
+    .then(async (buf) => {
+      const manifest = JSON.parse(buf.toString('utf-8')) as AnyListen.Extension.Manifest
+      return verifyManifest(extensionPath, manifest)
+    })
+    .catch((err) => {
+      console.log(err)
+      return null
+    })
+  if (!manifest) return null
+  return {
+    id: manifest.id,
+    name: manifest.name,
+    description: manifest.description,
+    icon: manifest.icon,
+    version: manifest.version,
+    target_engine: manifest.target_engine,
+    author: manifest.author,
+    homepage: manifest.homepage,
+    license: manifest.license,
+    categories: manifest.categories!,
+    tags: manifest.tags!,
+    grant: manifest.grant!,
+    contributes: manifest.contributes!,
+
+    directory: extensionPath,
+    i18nMessages: await buildExtensionI18nMessage(extensionPath),
+    dataDirectory: joinPath(extensionState.dataDir, manifest.id),
+    enter: manifest.main,
+    enabled: true,
+    installedTimestamp: Date.now(),
+    updatedTimestamp: Date.now(),
+    loaded: false,
+    loadTimestamp: 0,
+    removed: false,
+    publicKey: manifest.publicKey ?? '',
+    internal: false,
+  }
+}
+
+const getCompareVersion = (target: string) => {
+  if (compareVersions(EXTENSION_ENGINE, target) < 0) return -1
+  const targetParts = parseInt(target.split('.')[0])
+  const currentParts = parseInt(EXTENSION_ENGINE.split('.')[0])
+  if (Number.isNaN(targetParts) || Number.isNaN(currentParts)) return 0
+  return currentParts > targetParts ? 1 : 0
+}
+export const getCompareVersionMessage = (target: string) => {
+  switch (getCompareVersion(target)) {
+    case 1:
+      return i18n.t('extension.incompatible_new_engine')
+    case -1:
+      return i18n.t('extension.incompatible_old_engine')
+    default:
+      return ''
+  }
+}
+
+export const saveExtensionsSetting = async (extensions: AnyListen.Extension.Extension[]) => {
+  return fs.promises.writeFile(
+    extensionState.configFilePath,
+    JSON.stringify(
+      extensions.map(
+        (ext) =>
+          ({
+            id: ext.id,
+            name: ext.name,
+            enabled: ext.enabled,
+            installedTimestamp: ext.installedTimestamp,
+            updatedTimestamp: ext.updatedTimestamp,
+            removed: ext.removed,
+          }) satisfies AnyListen.Extension.Setting
+      )
+    )
+  )
+}
+
+export const removeExtensions = async (extensions: AnyListen.Extension.Extension[]) => {
+  while (extensions.length) {
+    const ext = extensions.shift()!
+    await unloadConfig(ext)
+    await Promise.all([removePath(ext.directory).catch(() => {}), removePath(ext.dataDirectory).catch(() => {})])
+  }
+}
+
+export const loadExtension = async (extension: AnyListen.Extension.Extension) => {
+  extensionEvent.loading(extension.id)
+  extension.errorMessage = ''
+  extension.loaded = false
+  let runTotalTime: number
+  try {
+    if (extension.internal) {
+      runTotalTime = await loadExtensionByInternalExtension(extension)
+    } else {
+      if (extension.target_engine) {
+        const msg = getCompareVersionMessage(extension.target_engine)
+        if (msg) throw new Error(msg)
+      }
+      const vmState = await createVmConetxt(extension, extensionState.preloadScript)
+      await setupVmContext(vmState)
+      try {
+        runTotalTime = await runExtension(vmState.vmContext, vmState.extension)
+      } catch (err) {
+        handlePreloadCall(
+          'logcat',
+          {
+            id: extension.id,
+            type: 'error',
+            timestamp: Date.now(),
+            message: `${(err as Error).message}\n${(err as Error).stack ?? ''}`,
+            name: extension.name,
+          },
+          vmState.logcat
+        )
+        throw err
+      }
+    }
+  } catch (err) {
+    console.error('load extension error: ', err)
+    extension.errorMessage = (err as Error).message
+    extensionEvent.loadError(extension.id, (err as Error).message)
+    return
+  }
+  extension.loadTimestamp = runTotalTime
+  extension.loaded = true
+  extensionEvent.loaded(extension.id, runTotalTime)
+  // if (errorMessage) extension.errorMessage = errorMessage
+}
+
+export const stopRunExtension = async (extension: AnyListen.Extension.Extension) => {
+  if (extension.internal) throw new Error('Internal extensions cannot be stopped')
+  extensionEvent.stoping(extension.id)
+  await destroyContext(extension.id)
+  extension.loaded = false
+  extensionEvent.stopped(extension.id)
+  return false
+}
+
+const downloadExtensionFile = async (url: string, bundlePath: string) => {
+  return eachMirror(null, url, url, async (url: string) => {
+    await simpleDownload(url, bundlePath, {
+      proxy: extensionState.proxy.host
+        ? {
+            host: extensionState.proxy.host,
+            port: extensionState.proxy.port
+              ? Number(extensionState.proxy.port)
+              : extensionState.proxy.host.startsWith('https')
+                ? 443
+                : 80,
+          }
+        : undefined,
+    }).catch(async (err) => {
+      await removePath(bundlePath)
+      throw err
+    })
+  })
+}
+
+export const downloadExtension = async (
+  url: string,
+  manifest?: AnyListen.IPCExtension.RemoteOnlineListItem | AnyListen.IPCExtension.RemoteOnlineDetail
+) => {
+  if (!isUrl(url)) {
+    const stats = await getFileStats(url)
+    if (!stats) throw new Error(`Invalid extension path: ${url}`)
+    if (stats.isFile()) {
+      if (await checkFile(url)) {
+        if (extensionState.tempDir == dirname(url)) return url
+        const tempPath = joinPath(extensionState.tempDir, basename(url))
+        await copyFile(url, tempPath)
+        return tempPath
+      }
+    } else if (await checkPath(url)) {
+      if (extensionState.tempDir == dirname(url)) return url
+      const tempPath = joinPath(extensionState.tempDir, basename(url))
+      await copyFile(url, tempPath)
+      return tempPath
+    }
+    throw new Error(`Unable to read the path: ${url}`)
+  }
+
+  const bundlePath = joinPath(extensionState.tempDir, `${toSha256(manifest?.id ?? generateId())}${FILE_EXT_NAME}`)
+  await downloadExtensionFile(url, bundlePath)
+  if (manifest?.sha256) {
+    const fileHash = await fileSha256(bundlePath)
+    if (fileHash !== manifest.sha256) {
+      await removePath(bundlePath)
+      throw new Error('Downloaded file hash does not match the manifest')
+    }
+  }
+  return bundlePath
+}
+
+const verifyExtension = async (unpackDir: string) => {
+  const sigFilePath = joinPath(unpackDir, EXTENSION.signFileName)
+  let extBundleFilePath = joinPath(unpackDir, EXTENSION.extBundleFileName)
+  const pubKey = await Promise.all([
+    fs.promises
+      .readFile(sigFilePath)
+      .then(async (buf) => {
+        const [sign, pubKey] = buf.toString('utf-8').split('\n')
+        return [sign, pubKey] as const
+      })
+      .catch((err) => {
+        console.log(err)
+        return null
+      }),
+    fs.promises.readFile(extBundleFilePath).catch((err) => {
+      console.log(err)
+      extBundleFilePath = ''
+      return null
+    }),
+  ]).then(async ([signInfo, extData]) => {
+    if (signInfo && extData) {
+      if (!verifySignature(extData, `${EXTENSION.publicKeyHeader}${signInfo[1]}${EXTENSION.publicKeyFooter}`, signInfo[0])) {
+        throw new Error('Verification failed')
+      }
+      return signInfo[1]
+    }
+    return ''
+  })
+  let extDir: string
+  if (extBundleFilePath) {
+    extDir = extBundleFilePath.replace(new RegExp(`${extnameRaw(EXTENSION.extBundleFileName).replaceAll('.', '\\.')}$`), '')
+    await createDir(extDir)
+    const { unpack } = await import('@any-listen/nodejs/tar')
+    await unpack(extBundleFilePath, extDir).catch(async (err: Error) => {
+      await removePath(extDir)
+      throw err
+    })
+  } else extDir = unpackDir
+  const ext = await parseExtension(extDir)
+  if (!ext) throw new Error('Invalid Extension')
+  const mainifestPath = joinPath(extDir, EXTENSION.mainifestName)
+  const manifest = JSON.parse((await fs.promises.readFile(mainifestPath)).toString('utf-8')) as Record<string, string>
+  manifest.publicKey = pubKey
+  await fs.promises.writeFile(mainifestPath, JSON.stringify(manifest))
+  return extDir
+}
+
+export const unpackExtension = async (bundlePath: string) => {
+  if (extname(bundlePath) != FILE_EXT_NAME) {
+    if ((await getFileStats(bundlePath))?.isDirectory()) {
+      return verifyExtension(bundlePath)
+    }
+    throw new Error(`Unknown file type: ${bundlePath}`)
+  }
+
+  const targetDir = bundlePath.replace(FILE_EXT_NAME_EXP, '')
+  if (await checkFile(targetDir)) await removePath(targetDir)
+  await createDir(targetDir)
+  const { unpack } = await import('@any-listen/nodejs/tar')
+  await unpack(bundlePath, targetDir).catch(async (err: Error) => {
+    await removePath(targetDir)
+    throw err
+  })
+
+  return verifyExtension(targetDir)
+}
+
+export const backupExtension = async (extensionDir: string) => {
+  const newPath = joinPath(extensionState.tempDir, `${basename(extensionDir)}.bak`)
+  await removePath(newPath).catch(() => {})
+  if (!(await renamePath(extensionDir, newPath))) {
+    throw new Error(`Could not rename extension: ${extensionDir}`)
+  }
+  return newPath
+}
+
+export const restoreExtension = async (extensionDir: string) => {
+  const newPath = joinPath(extensionState.extensionDir, basename(extensionDir.replace(/\.bak$/, '')))
+  await removePath(newPath).catch(() => {})
+  if (!(await renamePath(extensionDir, newPath))) {
+    throw new Error(`Could not rename extension: ${extensionDir}`)
+  }
+  return newPath
+}
+
+export const mvExtension = async (tempExtension: AnyListen.Extension.Extension) => {
+  if (dirname(tempExtension.directory) == extensionState.extensionDir) return tempExtension.directory
+  const newPath = joinPath(extensionState.extensionDir, `${tempExtension.id}_${tempExtension.version}`)
+  if (!(await renamePath(tempExtension.directory, newPath))) {
+    throw new Error(`Could not rename extension: ${tempExtension.directory}`)
+  }
+  return newPath
+}
+
+const readMessageFile = async (filePath: string): Promise<Record<string, string>> => {
+  return fs.promises
+    .readFile(filePath)
+    .then((data) => {
+      const messages = JSON.parse(data.toString('utf-8')) as Record<string, unknown>
+      for (const [key, val] of Object.entries(messages)) {
+        // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+        if (typeof val != 'string') delete messages[key]
+      }
+      return messages as Record<string, string>
+    })
+    .catch(() => ({}))
+}
+export const buildExtensionI18nMessage = async (extensionDir: string) => {
+  let fallbackPath = joinPath(extensionDir, 'i18n/en-us.json')
+  let targetPath = joinPath(extensionDir, `i18n/${extensionState.locale}.json`)
+  const [fallbackMessage, targetMessage] = await Promise.all([readMessageFile(fallbackPath), readMessageFile(targetPath)])
+  return { ...fallbackMessage, ...targetMessage }
+}
+
+export const updateResourceList = () => {
+  const resourceList: AnyListen.Extension.ResourceList = {
+    resources: {},
+    listProvider: [],
+    commands: [],
+  }
+  for (const ext of extensionState.extensions) {
+    if (!ext.loaded) continue
+    if (ext.contributes.resource) {
+      for (const res of ext.contributes.resource) {
+        for (const action of res.resource) {
+          let list = resourceList.resources[action]
+          if (!list) {
+            list = []
+            resourceList.resources[action] = list
+          }
+          list.push({
+            extensionId: ext.id,
+            id: res.id,
+            name: res.name,
+          })
+        }
+      }
+    }
+    if (ext.contributes.listProviders) {
+      for (const provider of ext.contributes.listProviders) {
+        resourceList.listProvider.push({
+          extensionId: ext.id,
+          id: provider.id,
+          name: provider.name,
+          description: provider.description,
+          form: provider.form,
+          fileSortable: provider.fileSortable,
+        })
+      }
+    }
+    if (ext.contributes.commands) {
+      for (const command of ext.contributes.commands) {
+        resourceList.commands.push({
+          extensionId: ext.id,
+          extensionName: ext.name,
+          fullCommand: `${ext.id}.${command.command}`,
+          command: command.command,
+          name: command.name,
+          description: command.description,
+          hidden: command.hidden,
+        })
+      }
+    }
+  }
+  extensionState.resourceList = resourceList
+  extensionEvent.resourceUpdated(resourceList)
+}
+export const updateResourceListThrottle = throttle(updateResourceList, 500)
+
+export const buildExtensionSettings = async () => {
+  if (extensionState.extensionSettings) return extensionState.extensionSettings
+
+  const list: AnyListen.Extension.ExtensionSetting[] = []
+  for (const ext of extensionState.extensions) {
+    if (!ext.contributes.settings) continue
+    const extSetting: AnyListen.Extension.ExtensionSetting = {
+      id: ext.id,
+      name: ext.name,
+      internal: ext.internal,
+      settingItems: [],
+    }
+    const configs = await getConfig(ext)
+    for (const item of ext.contributes.settings) {
+      const s: AnyListen.Extension.FormValueItem = {
+        ...item,
+        // @ts-expect-error
+        value: configs[item.field] ?? item.default,
+      }
+      switch (item.type) {
+        case 'configCheckbox':
+        case 'configCheckboxMultiple': {
+          const enumConfig = configs[item.enumConfigFiled] ?? []
+          const enums: AnyListen.Extension.ConfigEnum[] = Array.isArray(enumConfig)
+            ? enumConfig.map((v: Record<string, any>) => {
+                return {
+                  name: v[item.enumNameFiled],
+                  value: v[item.enumFiled],
+                  description: item.enumDescriptionFiled ? v[item.enumDescriptionFiled] : undefined,
+                  raw: v,
+                }
+              })
+            : []
+          ;(
+            s as AnyListen.Extension.FormConfigValue<
+              AnyListen.Extension.FormConfigCheckbox | AnyListen.Extension.FormConfigCheckboxMultiple
+            >
+          ).enum = enums
+          break
+        }
+        default:
+          break
+      }
+      extSetting.settingItems.push(s)
+    }
+    list.push(extSetting)
+  }
+  extensionState.extensionSettings = list
+  return list
+}
+
+export const getExtensionConfigValues = async (id: string, fields: string[]) => {
+  const targetExt = extensionState.extensions.find((ext) => ext.id == id)
+  if (!targetExt) throw new Error('extension not found')
+  const configs = await getConfig(targetExt)
+  const result: Record<string, unknown> = {}
+  for (const field of fields) {
+    result[field] = configs[field]
+  }
+  return result
+}
+
+export const updateExtensionSettings = async (id: string, config: Record<string, any>) => {
+  const targetExt = extensionState.extensions.find((ext) => ext.id == id)
+  if (!targetExt) throw new Error('extension not found')
+  // TODO: verify config key and value
+  const configs = await getConfig(targetExt)
+  const newConfig = { ...configs, ...config }
+  await saveConfig(targetExt, newConfig)
+  extensionEvent.extenstionSettingUpdated(id, Object.keys(config), config)
+  if (targetExt.loaded && !targetExt.internal) sendConfigUpdatedEvent(id, Object.keys(config), config)
+
+  const targetSetting = extensionState.extensionSettings?.find((s) => s.id == targetExt.id)
+  if (targetSetting) {
+    const keys = Object.keys(config)
+    for (const item of targetSetting.settingItems) {
+      if (keys.includes(item.field)) item.value = config[item.field]
+      if (item.type == 'configCheckbox' || item.type == 'configCheckboxMultiple') {
+        if (keys.includes(item.enumConfigFiled)) {
+          const enumConfig = newConfig[item.enumConfigFiled] ?? []
+          const enums: AnyListen.Extension.ConfigEnum[] = Array.isArray(enumConfig)
+            ? enumConfig.map((v: Record<string, any>) => {
+                return {
+                  ...item,
+                  name: v[item.enumNameFiled],
+                  value: v[item.enumFiled],
+                  description: item.enumDescriptionFiled ? v[item.enumDescriptionFiled] : undefined,
+                  raw: v,
+                }
+              })
+            : []
+          item.enum = enums
+          if (item.type == 'configCheckbox') {
+            if (item.value !== undefined && !item.enum.some((v) => v.value === item.value)) {
+              item.value = item.default
+            }
+          } else if (item.type == 'configCheckboxMultiple') {
+            if (item.value !== undefined) {
+              const enumValues = item.enum.map((e) => e.value)
+              item.value = item.value.filter((v) => enumValues.includes(v))
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+export const getExtensionLastLogs = async (extId?: string): Promise<AnyListen.IPCExtension.LastLog[]> => {
+  if (extId == null) {
+    // TODO limit
+    return (
+      await Promise.all(
+        extensionState.extensions
+          .filter((ext) => ext.enabled)
+          .map(async (ext) => {
+            return {
+              logs: await readLastLines(joinPath(ext.dataDirectory, EXTENSION.logFileName), 100),
+              id: ext.id,
+              name: ext.name,
+            }
+          })
+      )
+    ).filter((log) => log.logs)
+  }
+  const ext = extensionState.extensions.find((ext) => ext.id == extId)
+  if (!ext) throw new Error('extension not found')
+  return [
+    {
+      logs: await readLastLines(joinPath(ext.dataDirectory, EXTENSION.logFileName), 100),
+      id: ext.id,
+      name: ext.name,
+    },
+  ]
+}
+
+export const clearExtensionLogs = async (extId?: string) => {
+  if (extId == null) {
+    await Promise.all(
+      extensionState.extensions
+        .filter((ext) => ext.enabled)
+        .map(async (ext) => {
+          const logPath = joinPath(ext.dataDirectory, EXTENSION.logFileName)
+          if (await checkFile(logPath)) {
+            await fs.promises.writeFile(logPath, '')
+          }
+        })
+    )
+    return
+  }
+
+  const ext = extensionState.extensions.find((ext) => ext.id == extId)
+  if (!ext) throw new Error('extension not found')
+  const logPath = joinPath(ext.dataDirectory, EXTENSION.logFileName)
+  if (await checkFile(logPath)) {
+    await fs.promises.writeFile(logPath, '')
+  }
+}
+
+export { formatManifest } from './manifest'

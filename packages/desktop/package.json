@@ -1,0 +1,59 @@
+{
+  "name": "desktop",
+  "version": "0.7.0-beta.28",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/any-listen/any-listen-desktop.git"
+  },
+  "main": "build-config/vite.config.ts",
+  "scripts": {
+    "pack:win:setup:x64": "node build-config/build-pack.cjs target=win arch=x64 type=setup",
+    "pack:win:setup:arm64": "node build-config/build-pack.cjs target=win arch=arm64 type=setup",
+    "pack:win:portable:x64": "node build-config/build-pack.cjs target=win arch=x64 type=portable",
+    "pack:win:7z:x64": "node build-config/build-pack.cjs target=win arch=x64 type=green",
+    "pack:win:7z:arm64": "node build-config/build-pack.cjs target=win arch=arm64 type=green",
+    "pack:win_legacy:setup:x64": "node build-config/build-pack.cjs target=win arch=x64 type=win_legacy_setup",
+    "pack:win_legacy:7z:x64": "node build-config/build-pack.cjs target=win arch=x64 type=win_legacy_green",
+    "pack:win_legacy:7z:x86": "node build-config/build-pack.cjs target=win arch=x86 type=win_legacy_green",
+    "pack:linux:appImage": "node build-config/build-pack.cjs target=linux arch=x64 type=appImage",
+    "pack:linux:deb:amd64": "node build-config/build-pack.cjs target=linux arch=x64 type=deb",
+    "pack:linux:deb:arm64": "node build-config/build-pack.cjs target=linux arch=arm64 type=deb",
+    "pack:linux:deb:armv7l": "node build-config/build-pack.cjs target=linux arch=armv7l type=deb",
+    "pack:linux:rpm": "node build-config/build-pack.cjs target=linux arch=x64 type=rpm",
+    "pack:linux:pacman": "node build-config/build-pack.cjs target=linux arch=x64 type=pacman",
+    "pack:mac:dmg": "node build-config/build-pack.cjs target=mac arch=x64 type=dmg",
+    "pack:mac:dmg:arm64": "node build-config/build-pack.cjs target=mac arch=arm64 type=dmg",
+    "pack:dir": "node build-config/build-pack.cjs target=dir",
+    "publish:win": "node build-config/build-pack.cjs target=win arch=x64,arm64 type=setup,green publish=always",
+    "publish:win_legacy:setup": "node build-config/build-pack.cjs target=win arch=x64 type=win_legacy_setup publish=always",
+    "publish:win_legacy:green": "node build-config/build-pack.cjs target=win arch=x64,x86 type=win_legacy_green publish=always",
+    "publish:mac": "node build-config/build-pack.cjs target=mac arch=x64,arm64 type=dmg publish=always",
+    "publish:linux": "node build-config/build-pack.cjs target=linux arch=x64,arm64,armv7l type=deb,appImage,rpm,pacman publish=always",
+    "publish": "node publish",
+    "build": "vite build",
+    "rebuild:deps": "node ./build-config/before-install.cjs && electron-builder install-app-deps && node ./build-config/post-install.cjs"
+  },
+  "dependencies": {
+    "@any-listen/app": "workspace:@shared/app@*",
+    "@any-listen/common": "workspace:@shared/common@*",
+    "@any-listen/i18n": "workspace:@shared/i18n@*",
+    "@any-listen/nodejs": "workspace:@shared/nodejs@*",
+    "@any-listen/theme": "workspace:@shared/theme@*",
+    "better-sqlite3": "^12.10.0",
+    "electron-log": "5.4.4",
+    "electron-updater": "^6.8.8",
+    "font-list": "^2.1.0",
+    "message2call": "^2.0.3"
+  },
+  "devDependencies": {
+    "@any-listen/eslint": "workspace:@shared/eslint@*",
+    "@any-listen/types": "workspace:@shared/types@*",
+    "electron": "40.10.2",
+    "electron-builder": "26.13.1",
+    "electron-debug": "^4.1.0",
+    "electron-to-chromium": "^1.5.364",
+    "node-abi": "^4.31.0",
+    "tar": "^7.5.16",
+    "vite": "^8.0.16"
+  }
+}

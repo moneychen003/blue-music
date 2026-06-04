@@ -1,0 +1,60 @@
+FROM node:22-slim AS base
+
+FROM base AS builder
+
+ARG IS_CI
+ARG GIT_COMMIT_ID
+ARG GIT_COMMIT_DATE
+
+WORKDIR /source-code
+
+RUN apt-get update && \
+    apt-get install -y \
+    python3 \
+    build-essential \
+    git
+
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+ENV WEB_SERVER_ONLY="true"
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN npm install corepack -g && corepack enable pnpm && pnpm fetch
+
+COPY . ./
+RUN pnpm i --offline --frozen-lockfile
+
+ENV IS_CI=${IS_CI}
+ENV CI=${IS_CI}
+ENV GIT_COMMIT_ID=${GIT_COMMIT_ID}
+ENV GIT_COMMIT_DATE="${GIT_COMMIT_DATE}"
+
+RUN pnpm build:web
+
+FROM base AS final
+WORKDIR /server
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends tzdata && \
+    apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* && \
+    rm -rf /usr/local/lib/node_modules/npm \
+           /usr/local/lib/node_modules/corepack \
+           /usr/local/bin/npm \
+           /usr/local/bin/npx \
+           /usr/local/bin/corepack
+
+RUN groupadd -g 1001 algroup && useradd -u 1001 -g algroup -m anylisten
+RUN mkdir -p /server/data && chown anylisten:algroup /server/data
+
+COPY --from=builder --chown=anylisten:algroup ./source-code/build ./
+
+ENV DATA_PATH="/server/data"
+
+ENV NODE_ENV="production"
+ENV PORT="9500"
+ENV BIND_IP="0.0.0.0"
+
+EXPOSE 9500
+
+USER anylisten
+
+CMD [ "node", "index.cjs" ]

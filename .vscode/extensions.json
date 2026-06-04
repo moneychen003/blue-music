@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "dbaeumer.vscode-eslint",
+    "stylelint.vscode-stylelint",
+    "svelte.svelte-vscode",
+    "oxc.oxc-vscode",
+    "editorconfig.editorconfig",
+    "lokalise.i18n-ally",
+    "typescriptteam.native-preview"
+  ]
+}

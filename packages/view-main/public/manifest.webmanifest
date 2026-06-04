@@ -1,0 +1,18 @@
+{
+  "name": "Any Listen",
+  "short_name": "Any Listen",
+  "description": "Personal music library and streaming console",
+  "display": "standalone",
+  "start_url": "/",
+  "scope": "/",
+  "background_color": "#101010",
+  "theme_color": "#101010",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

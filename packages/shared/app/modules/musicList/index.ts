@@ -1,0 +1,324 @@
+import { LIST_IDS } from '@any-listen/common/constants'
+import { arrPush, throttle } from '@any-listen/common/utils'
+
+import { getSettings } from '../../common'
+import { getDeviceId } from '../../common/deviceId'
+import { parseRemoteMusicInfoMetadata, sortRemoteUserList, syncOnlineUserList, syncRemoteUserList } from '../../modules/extension'
+import { workers } from '../worker'
+import { proxyCallback, type DBSeriveTypes } from '../worker/utils'
+import { initMusicListEvent, musicListEvent } from './event'
+import {
+  handleAddMusics,
+  initLocalListProvider,
+  parseLocalMusicInfoMetadata,
+  sortLocalListMusics,
+  syncLocalList,
+} from './localListProvider'
+import { readPlaylistImportFile, savePlaylistExportFile } from './playlistFile'
+
+let dbService: DBSeriveTypes
+let scrollInfo: Map<string, number>
+let getScrollInfo: () => Promise<AnyListen.List.ListPositionInfo>
+let saveScrollInfo: (scrollInfo: AnyListen.List.ListPositionInfo) => Promise<void>
+
+export const initMusicList = async (
+  _dbService: DBSeriveTypes,
+  _getScrollInfo: typeof getScrollInfo,
+  _saveScrollInfo: typeof saveScrollInfo
+) => {
+  dbService = _dbService
+  initMusicListEvent(_dbService)
+  getScrollInfo = _getScrollInfo
+  saveScrollInfo = _saveScrollInfo
+  await initLocalListProvider()
+}
+
+export const getAllUserLists = async () => {
+  return dbService.getAllUserLists()
+}
+
+export const getListMusics = async (listId: string) => {
+  return dbService.getListMusics(listId)
+}
+
+const cacheListCovers = new Map<string, string | null | undefined>()
+export const getListsCover = async (
+  ids: string[],
+  getMusicPic: (params: {
+    musicInfo: AnyListen.Music.MusicInfo
+    listId: string
+    isRefresh?: boolean
+  }) => Promise<{ url: string | null | undefined }>
+): Promise<Record<string, string | undefined | null>> => {
+  const emptyCoverListIds: string[] = []
+  const covers: Record<string, string | undefined | null> = {}
+  for (const id of ids) {
+    if (cacheListCovers.has(id)) {
+      covers[id] = cacheListCovers.get(id)
+      continue
+    }
+    emptyCoverListIds.push(id)
+  }
+  if (emptyCoverListIds.length) {
+    const listMusics = await workers.dbService.getListsFirstMusics(emptyCoverListIds)
+    const coverPromises = listMusics.map<Promise<[string, string | null | undefined]>>(async (musics, index) => {
+      const listId = emptyCoverListIds[index]
+      if (!musics.length) return [listId, null] as const
+      return getMusicPic({ musicInfo: musics[0], listId })
+        .then((picInfo) => {
+          return [listId, picInfo.url] satisfies [string, string | null | undefined]
+        })
+        .catch(() => {
+          return [listId, null] satisfies [string, string | null | undefined]
+        })
+    })
+    const coversResult = await Promise.all(coverPromises)
+    for (const [listId, pic] of coversResult) {
+      covers[listId] = pic
+      cacheListCovers.set(listId, pic)
+    }
+  }
+
+  return covers
+}
+export const clearListCoverCache = (id?: string) => {
+  if (id) {
+    cacheListCovers.delete(id)
+  } else {
+    cacheListCovers.clear()
+  }
+}
+
+export const getMusicExistListIds = async (musicId: string) => {
+  return dbService.getMusicExistListIds(musicId)
+}
+
+export const checkListExistMusic = async (listId: string, musicId: string) => {
+  return dbService.checkListExistMusic(listId, musicId)
+}
+
+const initScrollInfo = async () => {
+  // eslint-disable-next-line require-atomic-updates, @typescript-eslint/no-unnecessary-condition
+  scrollInfo ??= new Map(Object.entries(await getScrollInfo()))
+}
+const saveListScrollInfoThrottle = throttle(() => {
+  void saveScrollInfo(Object.fromEntries(scrollInfo))
+}, 500)
+export const getListScrollInfo = async () => {
+  await initScrollInfo()
+  return Object.fromEntries(scrollInfo)
+}
+export const saveListScrollPosition = async (id: string, position: number) => {
+  await initScrollInfo()
+  scrollInfo.set(id, position)
+  saveListScrollInfoThrottle()
+}
+const removeListScrollInfo = async (ids: string[]) => {
+  await initScrollInfo()
+  for (const id of ids) scrollInfo.delete(id)
+  saveListScrollInfoThrottle()
+}
+const overrideListScrollInfo = async (ids: string[]) => {
+  await initScrollInfo()
+  for (const id of scrollInfo.keys()) {
+    if (ids.includes(id)) continue
+    scrollInfo.delete(id)
+  }
+  saveListScrollInfoThrottle()
+}
+
+const updateSongCount = async (listIds: string[]) => {
+  let updatedLists: AnyListen.List.MyListInfo[] = []
+  const targetLists = await dbService.getListInfos(listIds)
+  for (const targetList of targetLists) {
+    if (targetList) updatedLists.push(targetList)
+  }
+  if (updatedLists.length) {
+    void musicListEvent.listAction({ action: 'list_update', data: { lists: updatedLists, sync: true } })
+  }
+}
+export const sendMusicListAction = async (action: AnyListen.IPCList.ActionList) => {
+  await musicListEvent.listAction(action)
+  switch (action.action) {
+    case 'list_music_overwrite':
+      void updateSongCount([action.data.listId])
+      break
+    case 'list_music_add':
+      void updateSongCount([action.data.id])
+      break
+    case 'list_music_move':
+      void updateSongCount([action.data.toId, action.data.fromId])
+      break
+    case 'list_music_remove':
+      void updateSongCount([action.data.listId])
+      break
+    case 'list_music_clear':
+      void updateSongCount(action.data)
+      break
+    case 'list_data_overwrite': {
+      const ids = [LIST_IDS.DEFAULT, LIST_IDS.LOVE, ...action.data.userList.map((l) => l.id)]
+      void updateSongCount(ids)
+      void overrideListScrollInfo(ids)
+      break
+    }
+    case 'list_remove':
+      void removeListScrollInfo(action.data)
+      break
+    default:
+  }
+}
+
+export const updateMusicPic = async (listId: string, musicInfo: AnyListen.Music.MusicInfo) => {
+  await musicListEvent.list_music_update_pic(listId, musicInfo)
+}
+
+export const updateMusicPicIfNeeded = (musicInfo: AnyListen.Music.MusicInfo, picUrl: string, listId?: string | null) => {
+  if (!listId || !picUrl || musicInfo.meta.picUrl == picUrl) return
+  musicInfo.meta.picUrl = picUrl
+  void updateMusicPic(listId, musicInfo)
+}
+
+export const updateMusicBaseInfo = async (listId: string, musicInfos: AnyListen.Music.MusicInfo[]) => {
+  await musicListEvent.list_music_base_info_update(listId, musicInfos)
+}
+
+export const onMusicListAction = (listAction: (action: AnyListen.IPCList.ActionList) => Promise<void>): (() => void) => {
+  musicListEvent.on('listAction', listAction)
+  return () => {
+    musicListEvent.off('listAction', listAction)
+  }
+}
+
+const updateMusicPosition = async (listId: string, ids: string[]) => {
+  const musicInfos = await workers.dbService.getListMusics(listId)
+  const musicIds = new Set(musicInfos.map((m) => m.id))
+  ids = ids.filter((id) => musicIds.has(id))
+  await sendMusicListAction({
+    action: 'list_music_update_position',
+    data: { ids, listId, position: getSettings()['list.addMusicLocationType'] === 'top' ? 0 : musicInfos.length - 1 },
+  })
+}
+
+const addFolderMusicTasks = new Map<string, () => void>()
+export const addFolderMusics = async (listId: string, filePaths: string[], onEnd: (errorMessage?: string | null) => void) => {
+  let parsePromise = Promise.resolve(0)
+  let files: string[] = []
+  const onFilesProxy = proxyCallback(async (paths: string[]) => {
+    arrPush(files, paths)
+    parsePromise = handleAddMusics(listId, paths, true)
+    await parsePromise
+  })
+  const onEndProxy = proxyCallback((canceled: boolean) => {
+    addFolderMusicTasks.delete(listId)
+    void parsePromise.finally(() => {
+      void updateMusicPosition(listId, files)
+      if (canceled) onEnd(null)
+      else onEnd()
+    })
+  })
+  const id = await workers.utilService.scanFolderMusics(filePaths, onFilesProxy, onEndProxy)
+  addFolderMusicTasks.set(listId, () => {
+    void workers.utilService.stopFolderMusicsScan(id)
+    onFilesProxy.releaseProxy()
+    onEndProxy.releaseProxy()
+  })
+  return listId
+}
+export const cancelAddFolderMusics = async (taskId: string) => {
+  const cancel = addFolderMusicTasks.get(taskId)
+  if (!cancel) return
+  cancel()
+}
+export const getScanTaksIds = async () => {
+  return Array.from(addFolderMusicTasks.keys())
+}
+
+export const syncUserList = async (id: string) => {
+  const userLists = (await workers.dbService.getAllUserLists()).userList
+  const targetList = userLists.find((l) => l.id === id)
+  if (!targetList) throw new Error('list not found')
+  switch (targetList.type) {
+    case 'local':
+      if (targetList.meta.deviceId !== getDeviceId()) {
+        throw new Error('can not sync local list of other device')
+      }
+      return syncLocalList(targetList)
+    case 'remote':
+      return syncRemoteUserList(targetList)
+    case 'online':
+      return syncOnlineUserList(targetList)
+    default:
+      console.log('not sync list', targetList)
+      throw new Error('not supported list type')
+  }
+}
+
+export const parseMusicMetadata = async (listId: string, musicInfo: AnyListen.Music.MusicInfo) => {
+  const userLists = (await workers.dbService.getAllUserLists()).userList
+  const targetList = userLists.find((l) => l.id === listId)
+
+  if (musicInfo.isLocal) {
+    if (targetList?.type === 'local' && targetList.meta.deviceId !== getDeviceId()) return null
+    return parseLocalMusicInfoMetadata(musicInfo)
+  }
+  return parseRemoteMusicInfoMetadata(musicInfo)
+}
+
+export const sortListMusics = async (
+  id: string,
+  list: AnyListen.Music.MusicInfo[],
+  type: AnyListen.List.SortFileType
+): Promise<string[]> => {
+  const userLists = (await workers.dbService.getAllUserLists()).userList
+  const targetList = userLists.find((l) => l.id === id)
+  if (!targetList) throw new Error('list not found')
+  switch (targetList.type) {
+    case 'local':
+      if (targetList.meta.deviceId !== getDeviceId()) {
+        throw new Error('can not sync local list of other device')
+      }
+      return sortLocalListMusics(targetList, list as AnyListen.Music.MusicInfoLocal[], type)
+    case 'remote':
+      return sortRemoteUserList(targetList, list as AnyListen.Music.MusicInfoOnline[], type)
+    default:
+      console.log('not sync list', targetList)
+      throw new Error('not supported list type')
+  }
+}
+
+export const importPlaylistFile = async (listId: string, filePath: string): Promise<AnyListen.IPCList.PlaylistImportResult> => {
+  const parsed = await readPlaylistImportFile(filePath)
+  let imported = 0
+  if (parsed.localPaths.length) {
+    imported += await handleAddMusics(listId, parsed.localPaths, true)
+  }
+  if (parsed.musicInfos.length) {
+    await sendMusicListAction({
+      action: 'list_music_add',
+      data: {
+        addMusicLocationType: getSettings()['list.addMusicLocationType'],
+        id: listId,
+        musicInfos: parsed.musicInfos,
+      },
+    })
+    imported += parsed.musicInfos.length
+  }
+  return {
+    imported,
+    local: parsed.localPaths.length,
+    remote: parsed.musicInfos.length,
+    skipped: Math.max(0, parsed.total - imported),
+    total: parsed.total,
+  }
+}
+
+export const exportPlaylistFile = async (options: AnyListen.IPCList.PlaylistExportOptions): Promise<AnyListen.IPCList.PlaylistExportResult> => {
+  const musics = await workers.dbService.getListMusics(options.listId)
+  const filePath = await savePlaylistExportFile(options.listName, musics, options)
+  return {
+    filePath,
+    total: musics.length,
+  }
+}
+
+export { musicListEvent }

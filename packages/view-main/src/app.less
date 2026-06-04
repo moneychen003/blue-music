@@ -1,0 +1,202 @@
+@import './assets/styles/index.less';
+
+html {
+  height: 100vh;
+
+  &.desktop {
+    &.transparent:not(.fullscreen) {
+      padding: @shadow-app;
+      background: transparent;
+      #body {
+        border-radius: @radius-border;
+      }
+      #root {
+        border-radius: @radius-border;
+        box-shadow: 0 0 @shadow-app rgb(0 0 0 / 50%);
+      }
+    }
+    &.disable-transparent {
+      &:not(.mac) #body {
+        border: 1px solid var(--color-primary-light-500);
+      }
+    }
+    &.fullscreen {
+      background-color: var(--color-content-background);
+
+      .drag,
+      .drag-no-modal,
+      .drag-no-any-modal {
+        -webkit-app-region: no-drag;
+      }
+    }
+
+    .drag {
+      -webkit-app-region: drag;
+    }
+    .drag-no-modal {
+      -webkit-app-region: drag;
+    }
+    .show-modal .drag-no-modal {
+      -webkit-app-region: no-drag;
+    }
+    .drag-no-any-modal {
+      -webkit-app-region: drag;
+    }
+    .show-modal .drag-no-any-modal,
+    .show-fullscreen-modal .drag-no-any-modal {
+      -webkit-app-region: no-drag;
+    }
+
+    .no-drag {
+      -webkit-app-region: no-drag;
+    }
+  }
+
+  &.web {
+    &:not(.fullscreen) {
+      padding: @shadow-app;
+      background: transparent;
+      #body {
+        border-radius: @radius-border;
+      }
+      #root {
+        border-radius: @radius-border;
+        box-shadow: 0 0 @shadow-app rgb(0 0 0 / 30%);
+      }
+    }
+    &.fullscreen {
+      min-width: 650px;
+      min-height: 400px;
+    }
+    // background-color: var(--color-content-background) !important;
+    // #right {
+    //   border-top-left-radius: 0;
+    //   border-bottom-left-radius: 0;
+    // }
+  }
+
+  &.disable-animation * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+// html, body {
+//   // overflow: hidden;
+//   box-sizing: border-box;
+// }
+
+body {
+  height: 100%;
+  user-select: none;
+
+  * {
+    outline-color: var(--color-primary-dark-100-alpha-500);
+  }
+}
+#root {
+  position: relative;
+  // box-sizing: border-box;
+  height: 100%;
+  overflow: hidden;
+  color: var(--color-font);
+  background: var(--background-image) var(--background-image-position) no-repeat;
+  background-color: var(--color-content-background);
+  background-size: var(--background-image-size);
+  transition: background-color @transition-normal;
+
+  &::before {
+    .mixin-after();
+
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    // background-color: var(--color-main-background);
+    background-color: var(--color-main-background);
+    opacity: 1;
+    backdrop-filter: none;
+    // z-index: -1;
+  }
+}
+
+// #container {
+//   position: relative;
+//   display: flex;
+//   flex-flow: column nowrap;
+//   height: 100%;
+//   background-color: var(--color-app-background);
+// }
+
+// #left {
+//   flex: none;
+//   width: @width-app-left;
+// }
+#container {
+  position: relative;
+  // flex: auto;
+  display: flex;
+  flex-flow: column nowrap;
+  width: 100%;
+  height: 100%;
+
+  // border-top-left-radius: @radius-border;
+  // border-bottom-left-radius: @radius-border;
+  // overflow: hidden;
+  // background-color: var(--color-main-background);
+  // background-color: var(--color-app-background);
+  overflow: hidden;
+  background-color: var(--color-main-background);
+  box-shadow: 0 16px 50px rgb(0 0 0 / 14%);
+  transition: @transition-normal;
+  transition-property: opacity;
+}
+// #toolbar, #player {
+//   flex: none;
+// }
+// #view {
+//   position: relative;
+//   flex: auto;
+//   // display: flex;
+//   min-height: 0;
+// }
+
+.view-container {
+  min-height: 0;
+  transition: opacity @transition-normal;
+}
+// #root.show-modal > .view-container {
+//   opacity: 0.3;
+// }
+#view.show-modal > .view-container {
+  opacity: 0.2;
+}
+#app-main {
+  transition: @transition-normal;
+  transition-property: opacity;
+}
+
+html.web:not(.fullscreen) {
+  padding: 10px;
+  background: var(--color-app-background);
+}
+
+html.web:not(.fullscreen) #root,
+html.web:not(.fullscreen) #body {
+  border-radius: 8px;
+}
+
+html.web:not(.fullscreen) #root {
+  box-shadow: 0 18px 54px rgb(0 0 0 / 18%);
+}
+#root.show-modal {
+  #app-main,
+  .view-container > .player > * {
+    opacity: 0.3;
+  }
+}
+// #view.show-modal {
+//   #app-main,
+//   .view-container > .player > * {
+//     opacity: 0.2;
+//   }
+// }

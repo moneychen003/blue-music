@@ -1,0 +1,29 @@
+{
+  // https://github.com/tsconfig/bases#recommended-tsconfigjson
+  "extends": "@any-listen/eslint/tsconfig.node.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "rootDir": "./",
+    "outDir": "../../dist/web",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "moduleResolution": "bundler",
+    "types": ["@any-listen/types", "@any-listen/app", "@any-listen/nodejs/node_modules/@types/node"]
+  },
+  // Most ts-node options can be specified here using their programmatic names.
+  "ts-node": {
+    // It is faster to skip typechecking.
+    // Remove if you want ts-node to do typechecking.
+    "transpileOnly": true,
+    "files": true,
+    "compilerOptions": {
+      // compilerOptions specified here will override those declared below,
+      // but *only* in ts-node.  Useful if you want ts-node and tsc to use
+      // different options with a single tsconfig.json.
+    }
+  },
+  "include": ["**/*.d.ts", "**/*.ts", "**/*.js", "config.cjs", "package.json"],
+  "references": [{ "path": "./tsconfig.web.json" }],
+  "exclude": ["node_modules", "server", "src/preload/**/*"]
+}

@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'desktop-v*'
+      - 'webserver-v*'
+env:
+  DESKTOP_REPO: any-listen-desktop
+  WEBSERVER_REPO: any-listen-web-server-native-lib
+
+jobs:
+  sync-desktop-app:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref_name, 'desktop-')
+    steps:
+      - name: Checkout desktop app
+        uses: actions/checkout@v6
+        with:
+          repository: any-listen/${{ env.DESKTOP_REPO }}
+          token: ${{ secrets.GH_DESKTOP_PAT }}
+
+      - name: Checkout monorepo
+        uses: actions/checkout@v6
+        with:
+          path: any-listen
+          token: ${{ github.token }}
+
+      - name: Push Code
+        run: |
+          git config user.name "lyswhut"
+          git config user.email "lyswhut@qq.com"
+          git add .
+          tag_formatted=$(echo ${{ github.ref_name }} | sed 's/desktop-v\?//')
+          git commit -m "Release v$tag_formatted"
+          git remote set-url origin https://x-access-token:${{ secrets.GH_DESKTOP_PAT }}@github.com/any-listen/${{ env.DESKTOP_REPO }}.git
+          git push origin main
+
+  sync-web-server:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref_name, 'webserver-')
+    steps:
+      - name: Checkout web server
+        uses: actions/checkout@v6
+        with:
+          repository: any-listen/${{ env.WEBSERVER_REPO }}
+          submodules: 'true'
+          token: ${{ secrets.GH_WEB_SERVER_PAT }}
+
+      - name: Sync code
+        run: |
+          git submodule update --remote
+
+      - name: Push Code
+        run: |
+          git config user.name "lyswhut"
+          git config user.email "lyswhut@qq.com"
+          git add .
+          tag_formatted=$(echo ${{ github.ref_name }} | sed 's/webserver-v\?//')
+          git commit -m "release: v$tag_formatted"
+          git remote set-url origin https://x-access-token:${{ secrets.GH_WEB_SERVER_PAT }}@github.com/any-listen/${{ env.WEBSERVER_REPO }}.git
+          git push origin main

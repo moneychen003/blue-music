@@ -1,0 +1,71 @@
+@import './variables.less';
+
+/* 自动隐藏文字 */
+.mixin-ellipsis-1() {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mixin-ellipsis(@n: 1) {
+  display: -webkit-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-line-clamp: @n;
+  word-break: break-all;
+  overflow-wrap: break-word;
+  white-space: normal !important;
+  -webkit-box-orient: vertical;
+}
+.mixin-ellipsis-2() {
+  display: -webkit-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-line-clamp: 2;
+  word-break: break-all;
+  overflow-wrap: break-word;
+  white-space: normal !important;
+  -webkit-box-orient: vertical;
+}
+
+.mixin-after() {
+  position: absolute;
+  display: block;
+  content: '';
+}
+
+.bg(@opacity: 0.9) {
+  .mixin-after();
+
+  top: 0;
+  left: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  background-color: rgb(255 255 255 / 70%);
+  box-shadow: 0 0 4px rgb(0 0 0 / 20%);
+  opacity: @opacity;
+  backdrop-filter: blur(30px);
+}
+
+.nobreak() {
+  white-space: nowrap;
+}
+
+.auto-hidden() {
+  .mixin-ellipsis-1();
+}
+
+.center() {
+  text-align: center;
+}
+
+.break() {
+  word-break: break-all;
+}
+
+.select() {
+  user-select: text;
+}
+.no-select() {
+  user-select: none;
+}

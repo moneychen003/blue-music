@@ -1,0 +1,9 @@
+{
+  "extends": "@any-listen/eslint/tsconfig.node.json",
+  "compilerOptions": {
+    "moduleResolution": "Bundler",
+    "declaration": false,
+    "rootDir": "./",
+    "types": ["@any-listen/types", "../scripts/node_modules/vite/client"]
+  }
+}

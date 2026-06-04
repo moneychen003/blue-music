@@ -1,0 +1,8 @@
+{
+  "name": "@shared/types",
+  "types": "./index.d.ts",
+  "devDependencies": {
+    "@any-listen/eslint": "workspace:@shared/eslint@*",
+    "@any-listen/i18n": "workspace:@shared/i18n@*"
+  }
+}

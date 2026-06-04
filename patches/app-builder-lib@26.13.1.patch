@@ -1,0 +1,55 @@
+diff --git a/out/codeSign/macCodeSign.js b/out/codeSign/macCodeSign.js
+index 9a69042fd48f4759a1c697bf23fa5b44f2da2366..3ace8649d8e368042a6975be55a89b003ae610b8 100644
+--- a/out/codeSign/macCodeSign.js
++++ b/out/codeSign/macCodeSign.js
+@@ -255,7 +255,7 @@ async function parseIdentity(line) {
+     const firstQuoteIndex = line.indexOf('"');
+     const name = line.substring(firstQuoteIndex + 1, line.lastIndexOf('"'));
+     const hash = line.substring(0, firstQuoteIndex - 1);
+-    const { Identity: IdentityClass } = await (0, dynamicImport_1.dynamicImport)("@electron/osx-sign/dist/cjs/util-identities");
++    const { Identity: IdentityClass } = await (0, dynamicImport_1.dynamicImport)("@electron/osx-sign/dist/cjs/util-identities.js");
+     return new IdentityClass(name, hash);
+ }
+ function findIdentity(certType, qualifier, keychain) {
+diff --git a/out/mac/MacTargetHelper.d.ts b/out/mac/MacTargetHelper.d.ts
+index e511cc09d94f341301ba87241f4e0722d08c3640..fe6a00268bc8514b99496babb6cc58b6785363a4 100644
+--- a/out/mac/MacTargetHelper.d.ts
++++ b/out/mac/MacTargetHelper.d.ts
+@@ -1,6 +1,6 @@
+ import type { NotarizeOptionsNotaryTool } from "@electron/notarize/lib/types";
+ import type { PerFileSignOptions, SigningDistributionType, SignOptions } from "@electron/osx-sign/dist/cjs/types";
+-import type { Identity } from "@electron/osx-sign/dist/cjs/util-identities";
++import type { Identity } from "@electron/osx-sign/dist/cjs/util-identities.js";
+ import { Arch } from "builder-util";
+ import { Nullish } from "builder-util-runtime";
+ import { CertType } from "../codeSign/macCodeSign";
+diff --git a/out/mac/MacTargetHelper.js b/out/mac/MacTargetHelper.js
+index 796e85c93626e90029f052f3254e6bfabe7ac68d..db9560bef23b35e9bb7ccfff2dec4c743b8ee152 100644
+--- a/out/mac/MacTargetHelper.js
++++ b/out/mac/MacTargetHelper.js
+@@ -38,12 +38,12 @@ class MacTargetHelper {
+             }
+             const noIdentity = !config.sign && identity == null;
+             if (qualifier === "-") {
+-                const { Identity: IdentityClass } = await (0, dynamicImport_1.dynamicImport)("@electron/osx-sign/dist/cjs/util-identities");
++                const { Identity: IdentityClass } = await (0, dynamicImport_1.dynamicImport)("@electron/osx-sign/dist/cjs/util-identities.js");
+                 identity = new IdentityClass("-", undefined);
+             }
+             else if (noIdentity && fallBackToAdhoc) {
+                 builder_util_1.log.warn(null, "falling back to ad-hoc signature for macOS application code signing");
+-                const { Identity: IdentityClass } = await (0, dynamicImport_1.dynamicImport)("@electron/osx-sign/dist/cjs/util-identities");
++                const { Identity: IdentityClass } = await (0, dynamicImport_1.dynamicImport)("@electron/osx-sign/dist/cjs/util-identities.js");
+                 identity = new IdentityClass("-", undefined);
+             }
+             else if (noIdentity) {
+diff --git a/out/macPackager.d.ts b/out/macPackager.d.ts
+index 93e520c9fa16e6c45bd8d6509a9e5af6876027ac..b2f5d4e48aabb57423c815d84c47bd96ef550017 100644
+--- a/out/macPackager.d.ts
++++ b/out/macPackager.d.ts
+@@ -1,5 +1,5 @@
+ import { SignOptions } from "@electron/osx-sign/dist/cjs/types";
+-import { Identity } from "@electron/osx-sign/dist/cjs/util-identities";
++import { Identity } from "@electron/osx-sign/dist/cjs/util-identities.js";
+ import { Arch, AsyncTaskManager } from "builder-util";
+ import { MemoLazy, Nullish } from "builder-util-runtime";
+ import { AppInfo } from "./appInfo";

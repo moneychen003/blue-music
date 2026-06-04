@@ -1,0 +1,24 @@
+{
+  "name": "@shared/app",
+  "type": "module",
+  "types": "./types.d.ts",
+  "dependencies": {
+    "@any-listen/common": "workspace:@shared/common@*",
+    "@any-listen/i18n": "workspace:@shared/i18n@*",
+    "@any-listen/nodejs": "workspace:@shared/nodejs@*",
+    "@any-listen/theme": "workspace:@shared/theme@*",
+    "@any-listen/web": "workspace:@shared/web@*",
+    "better-sqlite3": "^12.10.0",
+    "iconv-lite": "^0.7.2",
+    "jschardet": "^3.1.4",
+    "jsonschema": "^1.5.0",
+    "message2call": "^2.0.3",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@any-listen/eslint": "workspace:@shared/eslint@*",
+    "@any-listen/types": "workspace:@shared/types@*",
+    "@types/better-sqlite3": "^7.6.13",
+    "vite": "^8.0.16"
+  }
+}

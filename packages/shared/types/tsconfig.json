@@ -1,0 +1,9 @@
+{
+  "extends": "@any-listen/eslint/tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "./"
+    // "typeRoots": [
+    //   "./types"
+    // ],
+  }
+}

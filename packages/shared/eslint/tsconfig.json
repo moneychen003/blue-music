@@ -1,0 +1,13 @@
+{
+  // https://github.com/tsconfig/bases#recommended-tsconfigjson
+  "extends": "@tsconfig/recommended/tsconfig.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "target": "ESNext",
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": false,
+    "rootDir": "./",
+    "outDir": "./dist"
+  }
+}

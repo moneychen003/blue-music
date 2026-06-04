@@ -1,0 +1,65 @@
+{
+  "prettier.useEditorConfig": true,
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "oxc.oxc-vscode",
+  "editor.formatOnSaveMode": "file",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.stylelint": "explicit",
+    "source.fixAll.eslint": "explicit"
+  },
+  "stylelint.validate": ["css", "less", "postcss", "svelte"],
+  "eslint.validate": ["svelte", "javascript", "typescript"],
+  "svelte.enable-ts-plugin": true,
+  "[svelte]": {
+    "editor.defaultFormatter": "svelte.svelte-vscode"
+  },
+  "i18n-ally.localesPaths": ["packages/shared/i18n/langs"],
+  // "i18n-ally.fullReloadOnChanged": true,
+  "i18n-ally.keystyle": "flat",
+  "i18n-ally.displayLanguage": "zh-cn",
+  "i18n-ally.sourceLanguage": "zh-cn",
+  "i18n-ally.translate.engines": ["deepl", "google-cn", "google", "openai", "libretranslate"],
+  "i18n-ally.sortKeys": true,
+  "js/ts.tsdk.path": "packages/shared/eslint/node_modules/typescript/lib",
+  "js/ts.experimental.useTsgo": true,
+  "i18n-ally.review.enabled": false,
+  "i18n-ally.review.gutters": false,
+  "github.copilot.chat.commitMessageGeneration.instructions": [
+    {
+      "text": "Generate exactly one commit subject line using Conventional Commits: <type>(<optional-scope>): <description>."
+    },
+    {
+      "text": "Use English only."
+    },
+    {
+      "text": "Allowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert."
+    },
+    {
+      "text": "Keep the subject concise: 8-14 words, present tense, no ending period."
+    },
+    {
+      "text": "Describe only observable code/config/file changes; do not explain intent, impact, or motivation."
+    },
+    {
+      "text": "Mention 1-2 most important changes only; avoid long lists and filler words."
+    },
+    {
+      "text": "If scope is clear, include it (for example: feat(shared): ..., fix(desktop): ...)."
+    },
+    {
+      "text": "If CHANGELOG.md or changelog files are updated, align wording with their updated entry."
+    },
+    {
+      "text": "If changelog entries include issue links, append the related issue number reference in subject (for example: (#123))."
+    },
+    {
+      "text": "Output subject only. No body, no footer, no code block, no quotes."
+    },
+    {
+      "text": "Good: feat(shared): add SingleEvent and update event API"
+    },
+    {
+      "text": "Bad: feat: add event handling improvements for better management and future extensibility"
+    }
+  ]
+}

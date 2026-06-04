@@ -1,0 +1,72 @@
+import http from 'node:http'
+import https from 'node:https'
+import { URL } from 'node:url'
+
+export interface Options {
+  method: 'get' | 'head' | 'delete' | 'patch' | 'post' | 'put'
+  params?: Record<string, string>
+  // body?: Record<string, string>
+  headers?: Record<string, string>
+  timeout?: number
+  agent?: http.Agent
+}
+
+const defaultOptions: Options = {
+  method: 'get',
+}
+
+type HttpCallback = (res: http.IncomingMessage) => void
+
+const sendRequest = (url: string, options: Options, callback?: HttpCallback) => {
+  const urlParse = new URL(url)
+  const httpOptions: http.RequestOptions | https.RequestOptions = {
+    // URL.hostname 对 IPv6 会返回带方括号的形式(如 [::1]),直接当 host 传给 http.request
+    // 会被当主机名去 getaddrinfo 解析而失败(ENOTFOUND [::1])。去掉方括号还原为 ::1。
+    host: urlParse.hostname.replace(/^\[(.+)\]$/, '$1'),
+    port: urlParse.port,
+    path: urlParse.pathname + urlParse.search,
+    method: options.method,
+  }
+
+  if (options.params) {
+    httpOptions.path! += `${urlParse.search ? '&' : '?'}${Object.entries(options.params)
+      .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+      .join('&')}`
+  }
+
+  if (options.headers) httpOptions.headers = { ...options.headers }
+
+  if (options.agent) httpOptions.agent = options.agent
+
+  return urlParse.protocol == 'https:' ? https.request(httpOptions, callback) : http.request(httpOptions, callback)
+}
+
+const applyTimeout = (request: http.ClientRequest, time: number) => {
+  let timeout: NodeJS.Timeout | null = setTimeout(() => {
+    timeout = null
+    if (request.destroyed) return
+    request.destroy(new Error('Request timeout'))
+  }, time)
+  request.on('response', () => {
+    if (!timeout) return
+    clearTimeout(timeout)
+    timeout = null
+  })
+}
+
+// const isRequireRedirect = (response: http.IncomingMessage) => {
+//   return response.statusCode &&
+//     response.statusCode > 300 &&
+//     response.statusCode < 400 &&
+//     Object.hasOwn(response.headers, 'location') &&
+//     response.headers.location
+// }
+
+// export function request(url: string, callback: HttpCallback)
+// export function request(url: string, options: Partial<Options>, callback: HttpCallback)
+export function request(url: string, _options: Partial<Options>, callback?: HttpCallback) {
+  let options: Options = { ...defaultOptions, ..._options }
+  const request = sendRequest(url, options, callback)
+  if (options.timeout) applyTimeout(request, options.timeout)
+  return request
+}

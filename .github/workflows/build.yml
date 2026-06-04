@@ -1,0 +1,68 @@
+name: Build Packages
+
+# 在真实的 windows / macOS / linux 云主机上各自打包 Blue Music,
+# 触发方式:① Actions 页面手动点 Run(workflow_dispatch) ② 推送 v* 标签(顺带发 Release)
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # 推 tag 时需要权限创建 Release 并上传产物
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            artifact: build/*.exe
+          - os: macos-latest
+            platform: mac
+            artifact: |
+              build/*.dmg
+              build/*.zip
+          - os: ubuntu-latest
+            platform: linux
+            artifact: build/*.deb
+    env:
+      DESKTOP_ONLY: '1' # postinstall 只重建 desktop 原生模块,跳过 web-server
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false' # 不做苹果证书签名(走 ad-hoc),避免卡签名
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build & package (${{ matrix.platform }})
+        run: pnpm -F @shared/scripts build:desktop:${{ matrix.platform }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: blue-music-${{ matrix.platform }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+
+      - name: Publish to Release (tag only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.artifact }}
