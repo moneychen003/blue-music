@@ -421,7 +421,7 @@
 <div
   class="netease-view"
   class:playlist-page={activePage == 'liked' || activePage == 'playlist'}
-  class:list-page={activePage == 'liked' || activePage == 'recent'}
+  class:list-page={activePage == 'liked' || activePage == 'recent' || activePage == 'curated'}
 >
   {#if activePage == 'curated'}
     <header class="page-header">
@@ -434,11 +434,13 @@
     {:else if !curatedList.length}
       <p class="online-empty">暂无歌单</p>
     {:else}
-      <section class="card-grid large">
-        {#each curatedList as item (item.id)}
-          {@render OnlineCard(item.img ?? '', item.name, item.play_count ?? item.author ?? '', () => openSonglist(item))}
-        {/each}
-      </section>
+      <div class="curated-scroll">
+        <section class="card-grid large">
+          {#each curatedList as item (item.id)}
+            {@render OnlineCard(item.img ?? '', item.name, item.play_count ?? item.author ?? '', () => openSonglist(item))}
+          {/each}
+        </section>
+      </div>
     {/if}
   {:else if activePage == 'liked'}
     <section class="playlist-hero">
@@ -571,6 +573,13 @@
     }
   }
 
+  // 精选页:外层 .netease-view.list-page 不滚,grid 放进这个可收缩滚动容器(复用 liked 的成熟模式)
+  .curated-scroll {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    padding-bottom: 80px;
+  }
   .card-grid {
     display: grid;
     gap: 18px;
