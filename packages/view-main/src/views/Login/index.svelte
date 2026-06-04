@@ -36,7 +36,7 @@
 
 <div class="view-container container">
   <div class="login-content">
-    <h2 class="login-title">Any Listen</h2>
+    <h2 class="login-title">{$t('app_name')}</h2>
     <form
       class="login-form"
       onsubmit={(event) => {
