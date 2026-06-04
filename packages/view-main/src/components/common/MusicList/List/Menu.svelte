@@ -111,13 +111,27 @@
     ) as AnyListen.Music.MusicInfoOnline[]
     if (!targets.length) return
     showNotify(targets.length > 1 ? `开始下载 ${targets.length} 首…` : '开始下载…')
+    // 音质回退链:优先下载档(320k),拿不到再退播放档,最后交给服务端默认。
+    // 某些歌在源里压根取不到(返回 gdstudio-no-url 之类非 http 占位符),逐档尝试后仍失败才报错。
+    const qualityChain = [
+      settingState.setting['download.quality'],
+      settingState.setting['player.playQuality'],
+      undefined,
+    ].filter((q, i, a) => a.indexOf(q) === i)
+    const resolveUrl = async (m: AnyListen.Music.MusicInfoOnline) => {
+      for (const quality of qualityChain) {
+        try {
+          const { url } = await getMusicUrl({ musicInfo: m, quality })
+          if (url && /^https?:\/\//i.test(url)) return url
+        } catch {}
+      }
+      return ''
+    }
     let ok = 0
     for (const m of targets) {
       try {
-        // 不强制 download.quality(常被设成源里没有的无损档,会返回 gdstudio-no-url 占位符),
-        // 按"最佳可用音质"解析,和播放走同一条路 → 拿到同源代理的真实 URL。
-        const { url } = await getMusicUrl({ musicInfo: m })
-        if (!url || !/^https?:\/\//i.test(url)) {
+        const url = await resolveUrl(m)
+        if (!url) {
           showNotify(`无法获取下载地址:${m.name}`)
           continue
         }
