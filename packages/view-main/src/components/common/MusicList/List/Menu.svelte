@@ -110,14 +110,15 @@
       (m) => !m.isLocal
     ) as AnyListen.Music.MusicInfoOnline[]
     if (!targets.length) return
-    const quality = settingState.setting['download.quality']
     showNotify(targets.length > 1 ? `开始下载 ${targets.length} 首…` : '开始下载…')
     let ok = 0
     for (const m of targets) {
       try {
-        const { url } = await getMusicUrl({ musicInfo: m, quality })
-        if (!url) {
-          showNotify(`获取地址失败:${m.name}`)
+        // 不强制 download.quality(常被设成源里没有的无损档,会返回 gdstudio-no-url 占位符),
+        // 按"最佳可用音质"解析,和播放走同一条路 → 拿到同源代理的真实 URL。
+        const { url } = await getMusicUrl({ musicInfo: m })
+        if (!url || !/^https?:\/\//i.test(url)) {
+          showNotify(`无法获取下载地址:${m.name}`)
           continue
         }
         const rawExt = url.split('?')[0].split('#')[0].split('.').pop()?.toLowerCase() ?? ''
