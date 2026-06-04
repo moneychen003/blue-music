@@ -59,6 +59,16 @@ export const setProxy = (url?: string) => {
 export const setProxyByHost = (host?: string, port?: string) => {
   setProxy(host ? `http://${host}:${port}` : undefined)
 }
+
+// 模块加载即应用 HTTP_PROXY 环境变量。
+// 修复扩展 worker 的启动竞态:网络代理(network.proxy)要等主进程 'inited' 事件后
+// 才下发到扩展 worker,而扩展 worker 启动后会立刻 fetch 音源 init.conf / 取播放 URL,
+// 这第一拨请求会赶在代理下发前走直连。让 worker(以及主进程)在 import 本模块时
+// 就带上代理,可保证扩展首次请求即走代理(用于海外服务器借国内出口取酷我等音源)。
+if (process.env.HTTP_PROXY) {
+  const p = process.env.HTTP_PROXY
+  setProxy(/^https?:\/\//.test(p) ? p : `http://${p}`)
+}
 const CONTENT_TYPE = {
   json: 'application/json',
   form: 'application/x-www-form-urlencoded',
