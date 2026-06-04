@@ -11,6 +11,7 @@
   import { startDownload } from '@/shared/ipc/list'
   import { settingState } from '@/modules/setting/store/state'
   import { showNotify } from '@/components/apis/notify'
+  import { getMusicUrl } from '@/modules/player/store/playerRemoteAction'
   let {
     source,
     onplay,
@@ -50,8 +51,7 @@
     const newMenu: Array<MenuList<MenuType>[number] | false> = [
       { action: 'play', label: $t('user_list_music_menu__play') },
       { action: 'playLater', label: $t('user_list_music_menu__play_later') },
-      !!import.meta.env.VITE_IS_DESKTOP &&
-        !selectInfo.musicInfo.isLocal && { action: 'download', label: $t('user_list_music_menu__download') },
+      !selectInfo.musicInfo.isLocal && { action: 'download', label: $t('user_list_music_menu__download') },
       selectInfo.listId != LIST_IDS.LOVE && { action: 'collect', label: '收藏到我喜欢' },
       { action: 'addTo', label: $t('user_list_music_menu__add_to') },
       local && { action: 'moveTo', label: $t('user_list_music_menu__move_to') },
@@ -93,13 +93,54 @@
     }
   }
 
+  // Web 端没有下载管理器,改为通过浏览器直接下载:
+  // 播放 URL 由服务端同源代理(/api/p_static/xxx.mp3),所以 <a download> 能可靠触发下载。
+  const triggerBrowserDownload = (url: string, fileName: string) => {
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName
+    a.rel = 'noopener'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+  }
+  const sanitizeFileName = (name: string) => name.replace(/[\\/:*?"<>|\n\r\t]/g, '_').slice(0, 120)
+  const handleBrowserDownload = async () => {
+    const targets = (selectInfo.selectedList.length ? selectInfo.selectedList : [selectInfo.musicInfo]).filter(
+      (m) => !m.isLocal
+    ) as AnyListen.Music.MusicInfoOnline[]
+    if (!targets.length) return
+    const quality = settingState.setting['download.quality']
+    showNotify(targets.length > 1 ? `开始下载 ${targets.length} 首…` : '开始下载…')
+    let ok = 0
+    for (const m of targets) {
+      try {
+        const { url } = await getMusicUrl({ musicInfo: m, quality })
+        if (!url) {
+          showNotify(`获取地址失败:${m.name}`)
+          continue
+        }
+        const rawExt = url.split('?')[0].split('#')[0].split('.').pop()?.toLowerCase() ?? ''
+        const ext = ['mp3', 'flac', 'wav', 'm4a', 'ogg', 'ape', 'aac'].includes(rawExt) ? rawExt : 'mp3'
+        triggerBrowserDownload(url, `${sanitizeFileName(`${m.name} - ${m.singer}`)}.${ext}`)
+        ok++
+        // 多文件时留出间隔,避免浏览器把连续下载当成弹窗拦截
+        if (targets.length > 1) await new Promise((r) => setTimeout(r, 600))
+      } catch (err) {
+        showNotify(`下载失败:${m.name}(${(err as Error).message})`)
+      }
+    }
+    if (ok && targets.length > 1) showNotify(`已触发下载 ${ok}/${targets.length} 首`)
+  }
+
   const handleClick = (menu: NonNullable<(typeof menus)[number]>) => {
     switch (menu.action) {
       case 'play':
         void onplay?.(selectInfo.musicInfo)
         break
       case 'download':
-        void handleDownload()
+        if (import.meta.env.VITE_IS_DESKTOP) void handleDownload()
+        else void handleBrowserDownload()
         break
       case 'collect':
         void addListMusics(
