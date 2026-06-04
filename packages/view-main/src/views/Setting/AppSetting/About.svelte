@@ -20,10 +20,10 @@
     <Btn
       link
       onclick={() => {
-        void openUrl('https://github.com/blue-music/blue-music')
+        void openUrl('https://github.com/moneychen003/blue-music')
       }}
     >
-      https://github.com/blue-music/blue-music
+      https://github.com/moneychen003/blue-music
     </Btn>
   </p>
   <p class="thanks">
