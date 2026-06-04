@@ -19,16 +19,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # win 用 7z 绿色版(解压即用):electron-builder 26.13.1 的 nsis/makensis 路径有 spawnAndWriteWithOutput bug,绕开
           - os: windows-latest
             platform: win
-            artifact: build/*.exe
+            packcmd: pnpm -F desktop pack:win:7z:x64
+            artifact: build/*.7z
           - os: macos-latest
             platform: mac
+            packcmd: pnpm -F desktop pack:mac:dmg:arm64
             artifact: |
               build/*.dmg
               build/*.zip
           - os: ubuntu-latest
             platform: linux
+            packcmd: pnpm -F desktop pack:linux:deb:amd64
             artifact: build/*.deb
     env:
       DESKTOP_ONLY: '1' # postinstall 只重建 desktop 原生模块,跳过 web-server
@@ -50,8 +54,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build & package (${{ matrix.platform }})
-        run: pnpm -F @shared/scripts build:desktop:${{ matrix.platform }}
+      - name: Build production bundle
+        run: pnpm -F @shared/scripts exec ts-node pack-desktop.ts
+
+      - name: Package (${{ matrix.platform }})
+        run: ${{ matrix.packcmd }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
