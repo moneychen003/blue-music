@@ -74,3 +74,4 @@ src/**/*-internal.js
 
 # 本地打包产物(不入库)
 dist-packages/
+ci-packages/
