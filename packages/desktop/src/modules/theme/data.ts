@@ -214,7 +214,8 @@ export const getTheme = () => {
     ...theme.config.themeColors,
     ...theme.config.extInfo,
     ...getGlobalSkinColors(useDarkSkin),
-    ...(useDarkSkin && (isAutoTheme || themeId == 'black') ? getNeteaseRedAccentColors() : {}),
+    // 蓝色强调色在深色/浅色模式都生效(原来只在深色,导致浅色/白天模式仍是基础主题的红)
+    ...(isAutoTheme || themeId == 'black' ? getNeteaseRedAccentColors() : {}),
   }
 
   return {

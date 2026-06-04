@@ -75,7 +75,7 @@
       height: 42px;
       color: rgb(255 255 255);
       background-color: var(--color-primary);
-      box-shadow: 0 8px 18px rgb(236 65 65 / 24%);
+      box-shadow: 0 8px 18px color-mix(in srgb, var(--color-primary) 24%, transparent);
     }
 
     // svg {

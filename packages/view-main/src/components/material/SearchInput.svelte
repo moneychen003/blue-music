@@ -250,8 +250,8 @@
     &.active {
       .form {
         background-color: var(--color-main-background);
-        border-color: rgb(236 65 65 / 28%);
-        box-shadow: 0 0 0 3px rgb(236 65 65 / 8%);
+        border-color: color-mix(in srgb, var(--color-primary) 28%, transparent);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 8%, transparent);
         input {
           border-bottom-left-radius: 999px;
         }

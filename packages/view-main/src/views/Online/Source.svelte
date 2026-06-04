@@ -49,10 +49,8 @@
 
     .list {
       display: flex;
+      flex-flow: row wrap;
       gap: 6px;
-      height: 32px;
-      overflow-x: auto;
-      overflow-y: hidden;
     }
     .list-item {
       position: relative;
@@ -77,7 +75,7 @@
       &.active {
         color: var(--color-primary);
         font-weight: 600;
-        background-color: rgb(236 65 65 / 10%);
+        background-color: color-mix(in srgb, var(--color-primary) 12%, transparent);
       }
 
     }
