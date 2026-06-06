@@ -57,16 +57,52 @@ export const getMusicUrl = async ({
   const id = buildMusicCacheId(musicInfo, targetQuality)
   const cachedUrl = await workers.dbService.getMusicUrl(id)
   if (cachedUrl && !isRefresh) return { isFromCache: true, quality: targetQuality, url: cachedUrl }
+
+  // 读优先:若此前已记住可用的"备用源",优先用它解析,避免再撞已失效的原源
+  let resolveInfo: AnyListen.Music.MusicInfo = musicInfo
+  let rememberedSource: string | undefined
+  if (!musicInfo.isLocal) {
+    try {
+      const others = await workers.dbService.getMusicInfoOtherSource(musicInfo.id)
+      if (others?.length) {
+        resolveInfo = others[0]
+        rememberedSource = others[0].meta?.source
+      }
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   const info = await getMusicUrlResource({
-    musicInfo,
+    musicInfo: resolveInfo,
     quality: targetQuality,
     type: getFileType(targetQuality),
   })
   void workers.dbService.musicUrlSave([{ id, url: info.url }])
+
+  // 写记忆 + 上报:实际取址成功的源 ≠ 原曲源 即"发生换源"。
+  // - 仅当该源不同于已记住的源时才更新记忆(UNIQUE(source_id,id) ON CONFLICT REPLACE 去重)并回报前端提示,
+  //   避免每次走记忆源播放都重复弹"已切换"提示。
+  let otherSource: AnyListen.Music.MusicInfoOnline | undefined
+  const used = info.musicInfo
+  const usedSource = used?.meta?.source
+  if (!musicInfo.isLocal && used && usedSource && usedSource !== musicInfo.meta.source) {
+    if (usedSource !== rememberedSource) {
+      try {
+        await workers.dbService.musicInfoOtherSourceRemove([musicInfo.id])
+        await workers.dbService.musicInfoOtherSourceAdd(musicInfo.id, [used])
+      } catch (err) {
+        console.error(err)
+      }
+      otherSource = used // 仅"新发现/记忆变更"时提示用户
+    }
+  }
+
   return {
     quality: info.quality,
     url: info.url,
     isFromCache: false,
+    otherSource,
   }
 }
 

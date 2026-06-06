@@ -418,6 +418,8 @@
   "player__playing": "播放中...",
   "player__prev": "上一曲",
   "player__refresh_url": "URL失效，正在刷新URL...",
+  "player__trying_other_source": "原音源失效，正在嘗試其他音源…",
+  "player__switched_source": "已自動切換音源：{name}",
   "player__skip_next": "下一曲",
   "player__skip_prev": "上一曲",
   "player__sound_effect": "音效設定（實驗性）",

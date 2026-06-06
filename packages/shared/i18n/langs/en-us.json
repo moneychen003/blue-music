@@ -418,6 +418,8 @@
   "player__playing": "Playing...",
   "player__prev": "Previous song",
   "player__refresh_url": "URL invalid, refreshing URL...",
+  "player__trying_other_source": "Source unavailable, trying other sources…",
+  "player__switched_source": "Auto-switched source: {name}",
   "player__skip_next": "next track",
   "player__skip_prev": "previous piece",
   "player__sound_effect": "Sound settings (experimental)",

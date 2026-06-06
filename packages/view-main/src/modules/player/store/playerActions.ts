@@ -6,6 +6,7 @@ import { createPlayMusicInfo, createPlayMusicInfoList } from '@any-listen/common
 import { getRandom } from '@any-listen/common/utils'
 import { checkPicUrl } from '@any-listen/web'
 
+import { showNotify } from '@/components/apis/notify'
 import { executeLocalCommand } from '@/modules/app/store/action'
 import { addInfo } from '@/modules/dislikeList/actions'
 import { addListMusics, parseMusicMetadata, removeListMusics, updateListMusic } from '@/modules/musicLibrary/store/actions'
@@ -23,6 +24,17 @@ import { addPlayHistoryList, getMusicLyric, getMusicPic, getMusicUrl, setPlayHis
 import { playerState } from './state'
 
 let gettingUrlId = ''
+// 音源 id → 友好名(用于自动换源提示);未知 id 回退为大写 id
+const SOURCE_NAMES: Record<string, string> = {
+  kw: '酷我',
+  kg: '酷狗',
+  wy: '网易云',
+  tx: 'QQ音乐',
+  mg: '咪咕',
+  joox: 'JOOX',
+  local: '本地',
+}
+const getSourceName = (source: string) => SOURCE_NAMES[source] ?? source.toUpperCase()
 const createDelayNextTimeout = (delay: number) => {
   let timeout: number | null
   const clearDelayNextTimeout = () => {
@@ -104,28 +116,33 @@ const resolvePlayQuality = (musicInfo: AnyListen.Music.MusicInfo): AnyListen.Mus
   return undefined
 }
 
+interface PlayUrlResult {
+  url: string | null
+  otherSource?: AnyListen.Music.MusicInfoOnline
+}
 const getMusicPlayUrl = async (
   musicInfo: AnyListen.Music.MusicInfo,
   isRefresh = false,
   isRetryed = false
-): Promise<string | null> => {
+): Promise<PlayUrlResult> => {
   // this.musicInfo.url = await getMusicPlayUrl(targetSong, type)
-  commit.setStatusText(i18n.t('player__geting_url'))
+  // isRefresh 即"原地址失效后的重试",此时后端很可能正在尝试其他音源,给出明确提示
+  commit.setStatusText(i18n.t(isRefresh ? 'player__trying_other_source' : 'player__geting_url'))
   if (settingState.setting['player.autoSkipOnError']) addLoadTimeout()
 
   const quality = resolvePlayQuality(musicInfo)
 
   return getMusicUrl({ musicInfo, isRefresh, quality })
-    .then(({ url }) => {
-      console.log('url', url)
-      if (diffCurrentMusicInfo(musicInfo)) return null
+    .then((info) => {
+      console.log('url', info.url)
+      if (diffCurrentMusicInfo(musicInfo)) return { url: null }
       // console.log(url)
-      return url
+      return { url: info.url, otherSource: info.otherSource }
     })
     .catch(async (err: Error) => {
       // console.log('err', err.message)
       if (!playerState.playing || diffCurrentMusicInfo(musicInfo)) {
-        return null
+        return { url: null }
       }
 
       // if (err.message == requestMsg.tooManyRequests) return delayRetry(musicInfo, isRefresh)
@@ -142,9 +159,13 @@ export const setMusicUrl = (musicInfo: AnyListen.Music.MusicInfo, isRefresh?: bo
   // if (cancelDelayRetry) cancelDelayRetry()
   gettingUrlId = musicInfo.id
   void getMusicPlayUrl(musicInfo, isRefresh)
-    .then((url) => {
-      if (!url) return
-      setResource(url)
+    .then((res) => {
+      if (!res.url) return
+      setResource(res.url)
+      // 发生自动换源:提示用户实际使用的音源(后端已把可用源记忆,下次直接用)
+      if (res.otherSource?.meta?.source && res.otherSource.meta.source !== musicInfo.meta.source) {
+        showNotify(i18n.t('player__switched_source', { name: getSourceName(res.otherSource.meta.source) }))
+      }
     })
     .catch((err: Error) => {
       console.log(err)

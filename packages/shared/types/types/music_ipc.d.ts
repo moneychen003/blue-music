@@ -34,6 +34,8 @@ declare namespace AnyListen {
       // toggleSource: boolean
       quality: string
       isFromCache: boolean
+      /** 实际取址成功时使用的"其他音源"信息(发生自动换源时存在,source 与原曲不同),供前端提示并更新角标 */
+      otherSource?: Music.MusicInfoOnline
     }
 
     interface GetMusicPicInfo {

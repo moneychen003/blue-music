@@ -117,8 +117,6 @@ export const findMusic = async ({
   const fMusicName = filterStr(name).toLowerCase()
   const fSinger = filterStr(sortSingle(singer)).toLowerCase()
   const fAlbumName = filterStr(albumName).toLowerCase()
-  const fInterval = getIntv(interval)
-  const isEqualsInterval = (intv: number) => Math.abs((fInterval || intv) - (intv || fInterval)) < 5
   const isIncludesName = (name: string) => fMusicName.includes(name) || name.includes(fMusicName)
   const isIncludesSinger = (singer: string) => (fSinger ? fSinger.includes(singer) || singer.includes(fSinger) : true)
   const isEqualsAlbum = (album: string) => (fAlbumName ? fAlbumName == album : true)
@@ -133,10 +131,8 @@ export const findMusic = async ({
       item.fAlbumName = filterStr(String(item.meta.albumName ?? '').toLowerCase())
       item.fInterval = getIntv(item.interval)
       // console.log(fMusicName, item.fMusicName, item.source)
-      if (!isEqualsInterval(item.fInterval)) {
-        item.name = null
-        continue
-      }
+      // 稳健换源:不再因时长 ±5s 不符直接丢弃候选(那会把"歌名+歌手"完全一致、仅时长略有出入的正确版本误杀);
+      // 时长仅作为下方 newResult 的排序权重。主匹配条件保持 歌名全等 + 歌手包含。
       if (item.fMusicName == fMusicName && isIncludesSinger(item.fSinger)) return item
     }
     for (const item of source.list as FindMusicType[]) {
