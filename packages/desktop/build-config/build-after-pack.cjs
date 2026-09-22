@@ -1,4 +1,6 @@
 const fs = require('fs').promises
+const { execFile } = require('node:child_process')
+const { promisify } = require('node:util')
 
 // 包含 macOS 常见语言代码的列表
 const locales = [
@@ -59,26 +61,9 @@ const locales = [
   'sr',
 ]
 
-const commonMacLanguagesInfoPlistStrings = {
-  CFBundleDisplayName: 'Any Listen',
-  CFBundleName: 'Any Listen',
-}
-// const macLanguagesInfoPlistStrings = {
-//   en: {
-//     CFBundleDisplayName: 'Any Listen',
-//     CFBundleName: 'Any Listen',
-//   },
-//   zh_CN: {
-//     CFBundleDisplayName: 'Any Listen',
-//     CFBundleName: 'Any Listen',
-//   },
-//   zh_TW: {
-//     CFBundleDisplayName: 'Any Listen',
-//     CFBundleName: 'Any Listen',
-//   },
-// }
 const macLanguagesInfoPlistStrings = locales.reduce((acc, locale) => {
-  acc[locale] = { ...commonMacLanguagesInfoPlistStrings }
+  const name = locale === 'zh_CN' ? '技得音乐' : locale === 'zh_TW' ? '技得音樂' : 'Jide Music'
+  acc[locale] = { CFBundleDisplayName: name, CFBundleName: name }
   return acc
 }, {})
 
@@ -92,12 +77,19 @@ module.exports = async (context) => {
   const resPath = `${appOutDir}/${packager.appInfo.productFilename}.app/Contents/Resources`
 
   // 创建APP语言包文件
-  return Promise.all(
-    Object.entries(macLanguagesInfoPlistStrings).map(([lang, config]) => {
+  await Promise.all(
+    Object.entries(macLanguagesInfoPlistStrings).map(async ([lang, config]) => {
       let infos = Object.entries(config)
         .map(([k, v]) => `"${k}" = "${v}";`)
         .join('\n')
+      await fs.mkdir(`${resPath}/${lang}.lproj`, { recursive: true })
       return fs.writeFile(`${resPath}/${lang}.lproj/InfoPlist.strings`, infos)
     })
   )
+  // Remove build-only Finder metadata that blocks signing, not quarantine.
+  for (const attribute of ['com.apple.FinderInfo', 'com.apple.ResourceFork']) {
+    await promisify(execFile)('/usr/bin/xattr', ['-dr', attribute, `${appOutDir}/${packager.appInfo.productFilename}.app`])
+      .catch((error) => { if (error.code !== 1) throw error })
+  }
+
 }

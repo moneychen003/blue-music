@@ -5,7 +5,7 @@
   import { useDownloadProgress, useVersionInfo } from '@/modules/version/reactive.svelte'
   import { t } from '@/plugins/i18n'
   import { dateFormat, sizeFormate } from '@/shared'
-  import { openDevTools } from '@/shared/ipc/app'
+  import { openDevTools, openUrl } from '@/shared/ipc/app'
   let versionInfo = useVersionInfo()
   let progress = useDownloadProgress()
   const allowPreRelease = useSettingValue('common.allowPreRelease')
@@ -61,6 +61,10 @@
       <div class="p small">{$t('settings.update.commit_date')}<span class="select">{commitDate}</span></div>
     {/if}
   </div>
+  {#if import.meta.env.VITE_IS_DESKTOP}
+    <div class="p small gap-top">{$t('settings.update.manual_only')}</div>
+    <div class="p"><Btn min onclick={() => { void openUrl('https://github.com/moneychen003/blue-music/releases') }}>{$t('settings.update.manual_open')}</Btn></div>
+  {:else}
   <div class="p small gap-top">
     {$t('settings.update.latest_label')}{versionInfo.val.newVersion && latestVersion != '0.0.0'
       ? latestVersion
@@ -86,6 +90,7 @@
     </div>
   {:else if versionInfo.val.status == 'checking'}
     <div class="p small">{$t('settings.update.checking')}</div>
+  {/if}
   {/if}
 </div>
 

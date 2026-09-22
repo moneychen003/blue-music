@@ -68,11 +68,8 @@ export const findMusic = async ({
   interval: string | null
 }): Promise<AnyListen.Music.MusicInfoOnline | null> => {
   // TODO: auto reversal of singer and name
-  const list = await musicSearch(extensionId, s, name, singer, 1, 20).catch((err) => {
-    console.error(err)
-    return null
-  })
-  if (!list) return null
+  // Let the fallback controller distinguish a failed source from no match.
+  const list = await musicSearch(extensionId, s, name, singer, 1, 20)
 
   const sortSingle = (singer: string) =>
     SINGERS_RXP.test(singer)

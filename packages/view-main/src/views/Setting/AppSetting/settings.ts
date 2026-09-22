@@ -386,18 +386,18 @@ export const settings: SettingListSection[] = [
     name: 'settings.update',
     list: [
       // t('settings.update.try_auto_update')
-      {
+      import.meta.env.VITE_IS_WEB ? {
         field: 'common.tryAutoUpdate',
         name: 'settings.update.try_auto_update',
         description: 'settings.update.try_auto_update_desc',
         type: 'boolean',
-      },
-      {
+      } : null,
+      import.meta.env.VITE_IS_WEB ? {
         field: 'common.allowPreRelease',
         name: 'settings.update.allow_pre_release',
         description: 'settings.update.allow_pre_release_desc',
         type: 'boolean',
-      },
+      } : null,
       {
         field: 'common.showChangeLog',
         name: 'settings.update.show_change_log',

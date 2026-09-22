@@ -38,7 +38,7 @@
         release: 'https://github.com/any-listen/any-listen-web-server/releases',
       }
     : {
-        release: 'https://github.com/any-listen/any-listen-desktop/releases',
+        release: 'https://github.com/moneychen003/blue-music/releases',
       }
 
   let disabledIgnoreFailBtn = $state(false)
@@ -145,6 +145,10 @@
   })
 
   const handleCheckUpdate = () => {
+    if (import.meta.env.VITE_IS_DESKTOP) {
+      showNotify(i18n.t('settings.update.manual_only'))
+      return
+    }
     void checkUpdate().then((hasNewVer) => {
       if (hasNewVer) {
         showNotify(i18n.t('update_modal.check_result_new'))
@@ -201,7 +205,13 @@
 {/snippet}
 
 <Modal teleport="#root" bind:visible maxwidth="72%" {onafterleave} minheight="0">
-  {#if versionInfo.val.isLatest}
+  {#if import.meta.env.VITE_IS_DESKTOP}
+    <main class="version-modal-main">
+      <h2>{$t('app_name')} {versionInfo.val.version}</h2>
+      <div class="version-modal-content"><p>{$t('settings.update.manual_only')}</p></div>
+      <div class="footer"><Btn onclick={() => handleOpenUrl(urls.release)}>{$t('settings.update.manual_open')}</Btn></div>
+    </main>
+  {:else if versionInfo.val.isLatest}
     <main class="version-modal-main">
       <h2>{$t('update_modal.latest_title')}</h2>
       {@render versionSnippet()}

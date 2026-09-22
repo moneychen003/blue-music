@@ -1,0 +1,41 @@
+{
+  "id": "jide-open-music",
+  "name": "技得开放音乐",
+  "version": "0.1.0",
+  "target_engine": "1.1.2",
+  "description": "透明、只读的公共领域音乐接入：Musopen 完整曲库、Archive CC0 条目发现。",
+  "author": "技得音乐",
+  "license": "MIT",
+  "homepage": "https://archive.org/details/MusopenCollectionAsFlac",
+  "main": "main.js",
+  "grant": [
+    "internet"
+  ],
+  "categories": [],
+  "tags": [
+    "public-domain",
+    "classical"
+  ],
+  "contributes": {
+    "resource": [
+      {
+        "id": "musopen",
+        "name": "Musopen 公共领域古典",
+        "resource": [
+          "musicSearch",
+          "musicUrl",
+          "musicPic"
+        ]
+      },
+      {
+        "id": "archive_cc0",
+        "name": "Internet Archive CC0",
+        "resource": [
+          "musicSearch",
+          "musicUrl",
+          "musicPic"
+        ]
+      }
+    ]
+  }
+}

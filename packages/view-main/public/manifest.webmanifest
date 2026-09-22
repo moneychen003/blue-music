@@ -1,7 +1,7 @@
 {
-  "name": "Any Listen",
-  "short_name": "Any Listen",
-  "description": "Personal music library and streaming console",
+  "name": "技得音乐",
+  "short_name": "技得音乐",
+  "description": "技得音乐 · Jide Music — 个人音乐库与跨平台播放器",
   "display": "standalone",
   "start_url": "/",
   "scope": "/",

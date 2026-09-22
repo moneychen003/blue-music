@@ -1,9 +1,15 @@
 import { getLatestVersion } from '@any-listen/common/tools'
 
+import { i18n } from '@/i18n'
+
 import { appEvent, appState } from '../app'
 import { checkUpdate, downloadUpdate, initUpdate, restartUpdate } from './electronUpdate'
 import { request } from './request'
 import { compareVersions, sleep } from './utils'
+
+// This local fork has no independently verified, signed update channel.
+const MANUAL_UPDATE_ONLY = true
+const manualUpdateError = () => new Error(i18n.t('settings.update.manual_only'))
 
 interface EventTypes {
   checking_for_update: never
@@ -76,6 +82,7 @@ const getNpmPkgInfo = async (url: string) => {
   })
 }
 export const getUpdateInfo = async (index = 0): Promise<AnyListen.UpdateInfo> => {
+  if (MANUAL_UPDATE_ONLY) throw manualUpdateError()
   const [url, source] = address[index]
   let promise: Promise<AnyListen.UpdateInfo>
   switch (source) {
@@ -97,6 +104,7 @@ export const getUpdateInfo = async (index = 0): Promise<AnyListen.UpdateInfo> =>
 export class Update extends UpdateEvent {
   private info: AnyListen.UpdateInfo | null = null
   initUpdate() {
+    if (MANUAL_UPDATE_ONLY) return
     initUpdate(this)
     appEvent.on('updated_config', (keys, settings) => {
       if (keys.includes('common.allowPreRelease')) {
@@ -105,6 +113,7 @@ export class Update extends UpdateEvent {
     })
   }
   async checkUpdateStatus(isAutoUpdate: boolean) {
+    if (MANUAL_UPDATE_ONLY) return false
     if (!this.info) return false
     const latest = getLatestVersion(this.info, appState.appSetting['common.allowPreRelease'])
     if (compareVersions(appState.version.version, latest.version) < 0) {
@@ -128,6 +137,10 @@ export class Update extends UpdateEvent {
     return false
   }
   async checkForUpdates(isAutoUpdate: boolean) {
+    if (MANUAL_UPDATE_ONLY) {
+      this.emit('error', manualUpdateError())
+      return false
+    }
     this.emit('checking_for_update')
     try {
       this.info = await getUpdateInfo()
@@ -140,6 +153,10 @@ export class Update extends UpdateEvent {
   }
   // eslint-disable-next-line @typescript-eslint/class-methods-use-this
   async downloadUpdate() {
+    if (MANUAL_UPDATE_ONLY) {
+      this.emit('error', manualUpdateError())
+      return
+    }
     await downloadUpdate()
   }
   async isUpdateAvailable() {
@@ -147,12 +164,17 @@ export class Update extends UpdateEvent {
   }
   // eslint-disable-next-line @typescript-eslint/class-methods-use-this
   async quitAndInstall() {
+    if (MANUAL_UPDATE_ONLY) {
+      this.emit('error', manualUpdateError())
+      return
+    }
     await restartUpdate()
   }
 }
 export const update = new Update()
 
 export const startCheckUpdateTimeout = async (): Promise<void> => {
+  if (MANUAL_UPDATE_ONLY) return
   await update.checkForUpdates(appState.appSetting['common.tryAutoUpdate']).catch(() => {})
   await sleep(86400_000)
   return startCheckUpdateTimeout()

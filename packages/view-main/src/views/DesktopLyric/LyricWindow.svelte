@@ -227,7 +227,7 @@
       {/if}
     {:else}
       <div class="line cur placeholder">
-        <span class="text">{title || 'Any Listen 桌面歌词'}</span>
+        <span class="text">{title || '技得音乐 桌面歌词'}</span>
       </div>
     {/if}
   </div>

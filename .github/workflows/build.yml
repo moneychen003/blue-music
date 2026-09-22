@@ -1,12 +1,9 @@
 name: Build Packages
 
-# 在真实的 windows / macOS / linux 云主机上各自打包 Blue Music,
-# 触发方式:① Actions 页面手动点 Run(workflow_dispatch) ② 推送 v* 标签(顺带发 Release)
+# 在真实的 windows / macOS / linux 云主机上各自打包 Jide Music,
+# 手动构建；发布前逐项验收，不在推送标签时自动发布。
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - 'v*'
 
 permissions:
   contents: write # 推 tag 时需要权限创建 Release 并上传产物

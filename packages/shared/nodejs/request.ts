@@ -218,7 +218,9 @@ const buildRequestBody = (options: Options) => {
 }
 
 const buildRequestDispatcher = (options: Options) => {
-  let dispatcher: Dispatcher.ComposedDispatcher | undefined
+  // Honor retryNum even when callers use the default redirect policy.
+  let dispatcher: Dispatcher.ComposedDispatcher | undefined =
+    options.retryNum != null && options.retryNum != 3 ? buildDispatcher(redirectDispatcher, options.retryNum) : undefined
 
   if (options.maxRedirect != null) {
     if (options.maxRedirect != defaultOptions.maxRedirect) {

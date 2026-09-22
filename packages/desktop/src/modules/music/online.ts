@@ -6,6 +6,7 @@ import {
   getMusicPic as getMusicPicResource,
   getMusicUrlByExtensionSource,
   getMusicUrl as getMusicUrlResource,
+  assertPlayableMusicUrl,
 } from '@any-listen/app/modules/resources'
 import { buildMusicCacheId, getFileType } from '@any-listen/common/tools'
 
@@ -28,8 +29,17 @@ export const getMusicUrlByExtSource = async ({
   quality?: string
 }): Promise<AnyListen.IPCMusic.MusicUrlInfo> => {
   const targetQuality = quality ?? appState.appSetting['player.playQuality']
-  const cachedUrl = await workers.dbService.getMusicUrl(buildMusicCacheId(musicInfo, targetQuality))
-  if (cachedUrl && !isRefresh) return { isFromCache: true, quality: targetQuality, url: cachedUrl }
+  const id = buildMusicCacheId(musicInfo, targetQuality)
+  const cachedUrl = await workers.dbService.getMusicUrl(id)
+  if (cachedUrl && !isRefresh) {
+    try {
+      await assertPlayableMusicUrl(cachedUrl, musicInfo, true)
+      return { isFromCache: true, quality: targetQuality, url: cachedUrl }
+    } catch (err) {
+      console.error(err)
+      await workers.dbService.musicUrlRemove([id])
+    }
+  }
   const info = await getMusicUrlByExtensionSource({
     musicInfo,
     quality: targetQuality,
@@ -56,7 +66,15 @@ export const getMusicUrl = async ({
   const targetQuality = quality ?? appState.appSetting['player.playQuality']
   const id = buildMusicCacheId(musicInfo, targetQuality)
   const cachedUrl = await workers.dbService.getMusicUrl(id)
-  if (cachedUrl && !isRefresh) return { isFromCache: true, quality: targetQuality, url: cachedUrl }
+  if (cachedUrl && !isRefresh) {
+    try {
+      await assertPlayableMusicUrl(cachedUrl, musicInfo, true)
+      return { isFromCache: true, quality: targetQuality, url: cachedUrl }
+    } catch (err) {
+      console.error(err)
+      await workers.dbService.musicUrlRemove([id])
+    }
+  }
 
   // 读优先:若此前已记住可用的"备用源",优先用它解析,避免再撞已失效的原源
   let resolveInfo: AnyListen.Music.MusicInfo = musicInfo
@@ -78,7 +96,10 @@ export const getMusicUrl = async ({
     quality: targetQuality,
     type: getFileType(targetQuality),
   })
-  void workers.dbService.musicUrlSave([{ id, url: info.url }])
+  // Cache under the actual returned quality, never label a lower bitrate as
+  // the requested quality on the next play.
+  const actualId = buildMusicCacheId(musicInfo, info.quality)
+  void workers.dbService.musicUrlSave([{ id: actualId, url: info.url }])
 
   // 写记忆 + 上报:实际取址成功的源 ≠ 原曲源 即"发生换源"。
   // - 仅当该源不同于已记住的源时才更新记忆(UNIQUE(source_id,id) ON CONFLICT REPLACE 去重)并回报前端提示,

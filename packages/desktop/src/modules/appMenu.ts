@@ -1,4 +1,4 @@
-import { app, Menu } from 'electron'
+import { Menu } from 'electron'
 
 import { actions } from '@/actions'
 import { i18n, languageChangeEvent } from '@/i18n'
@@ -10,7 +10,7 @@ export const initAppMenu = async () => {
       Menu.setApplicationMenu(
         Menu.buildFromTemplate([
           {
-            label: app.getName(),
+            label: i18n.t('app_name'),
             submenu: [
               { label: i18n.t('main.app_menu.about_app'), role: 'about' },
               { type: 'separator' },

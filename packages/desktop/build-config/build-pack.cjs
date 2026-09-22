@@ -1,7 +1,7 @@
 const builder = require('electron-builder')
 const beforePack = require('./build-before-pack.cjs')
 const afterPack = require('./build-after-pack.cjs')
-// const fs = require('node:fs')
+const fs = require('node:fs')
 const path = require('node:path')
 const { rmSourceModule } = require('./native-module.cjs')
 
@@ -13,8 +13,9 @@ const rootPath = path.join(__dirname, '../../..')
  */
 const options = {
   appId: 'com.bluemusic.desktop',
-  productName: 'Blue Music',
+  productName: '技得音乐',
   extraMetadata: {
+    // Stable internal identity preserves the existing userData directory.
     name: 'blue-music',
     main: 'dist/electron/main.js',
     description: 'A cross-platform private music playback service',
@@ -31,14 +32,15 @@ const options = {
   },
   directories: {
     buildResources: './resources',
-    output: path.join(rootPath, 'build'),
+    // macOS File Provider folders can re-add FinderInfo while signing.
+    output: process.env.JIDE_BUILD_OUTPUT || path.join(rootPath, 'build'),
   },
   files: [
     '!node_modules/**/*',
     'node_modules/font-list',
     {
-      // from: fs.realpathSync(path.join(__dirname, '../node_modules/better-sqlite3/build/Release')),
-      from: 'node_modules/better-sqlite3/build/Release',
+      // pnpm keeps native modules behind symlinks; copy from the resolved directory.
+      from: fs.realpathSync(path.join(__dirname, '../node_modules/better-sqlite3/build/Release')),
       to: 'dist/electron/native',
       filter: ['better_sqlite3.node'],
     },
@@ -48,13 +50,8 @@ const options = {
     smartUnpack: false,
   },
   extraResources: ['./licenses'],
-  publish: [
-    {
-      provider: 'github',
-      owner: 'any-listen',
-      repo: 'any-listen-desktop',
-    },
-  ],
+  // Local custom builds must never inherit the upstream update feed.
+  publish: null,
 }
 /**
  * @type {import('electron-builder').Configuration}
@@ -73,7 +70,7 @@ const winOptions = {
     allowToChangeInstallationDirectory: true,
     differentialPackage: true,
     license: './licenses/license.rtf',
-    shortcutName: 'Blue Music',
+    shortcutName: '技得音乐',
     artifactName: `\${productName}-\${version}-\${arch}-Setup.\${ext}`,
   },
   portable: {
@@ -97,16 +94,16 @@ const linuxOptions = {
       // https://specifications.freedesktop.org/desktop-entry-spec/latest/example.html
       // https://developer.gnome.org/documentation/guidelines/maintainer/integrating.html#desktop-files
       entry: {
-        Name: '蓝亦云音乐',
-        'Name[zh_CN]': '蓝亦云音乐',
-        'Name[zh_TW]': '藍亦雲音樂',
+        Name: '技得音乐',
+        'Name[zh_CN]': '技得音乐',
+        'Name[zh_TW]': '技得音樂',
         Encoding: 'UTF-8',
         MimeType: 'x-scheme-handler/anylisten',
         StartupNotify: 'false',
       },
-      // Name: '蓝亦云音乐',
-      // 'Name[zh_CN]': '蓝亦云音乐',
-      // 'Name[zh_TW]': '藍亦雲音樂',
+      // Name: '技得音乐',
+      // 'Name[zh_CN]': '技得音乐',
+      // 'Name[zh_TW]': '技得音樂',
       // Encoding: 'UTF-8',
       // MimeType: 'x-scheme-handler/anylisten',
       // StartupNotify: 'false',
@@ -150,7 +147,7 @@ const macOptions = {
         path: '/Applications',
       },
     ],
-    title: 'Blue Music v${version}',
+    title: '技得音乐 v${version}',
   },
 }
 
@@ -304,6 +301,7 @@ const build = async (target, arch, packageTypes, publishType) => {
   if (target == 'dir') {
     await builder.build({
       dir: true,
+      publish: 'never',
       config: { ...options, ...winOptions, ...linuxOptions, ...macOptions },
     })
     return
@@ -341,5 +339,5 @@ if (params.target != 'dir' && params.type == null) throw new Error('Missing type
 
 console.log(params.target, params.arch, params.type, params.publish ?? '')
 
-rmSourceModule()
+if (params.target == 'linux') rmSourceModule()
 build(params.target, params.arch?.split(','), params.type?.split(','), params.publish)

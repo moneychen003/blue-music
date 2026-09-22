@@ -1,4 +1,5 @@
 import { findMusic as findMusicByExt } from './search/music'
+import { isSourceCoolingDown, runSourceAction } from './sourceHealth'
 import { buildExtSourceId, getPreferredExtSource } from './utils'
 
 const findSourceMusic = async <T>(
@@ -11,18 +12,25 @@ const findSourceMusic = async <T>(
   handler: (info: AnyListen.Music.MusicInfoOnline) => Promise<T>,
   excludeList: string[] = []
 ): Promise<T> => {
-  const source = getPreferredExtSource('musicSearch', excludeList)
-  if (!source) throw new Error('Get url failed, no source')
-  const music = await findMusicByExt({ extensionId: source.extensionId, source: source.id, ...info })
-  if (music) {
+  // A failed extension must not abort the whole fallback chain. Exclude before
+  // awaiting so even an exception, malformed result or timeout advances it.
+  const excluded = [...excludeList]
+  while (true) {
+    const source = getPreferredExtSource('musicSearch', excluded)
+    if (!source) throw new Error('Get url failed, no source')
+    const sourceId = buildExtSourceId(source.extensionId, source.id)
+    excluded.push(sourceId)
+    if (isSourceCoolingDown('musicSearch', sourceId)) continue
     try {
-      return await handler(music)
-    } catch (e) {
-      console.error(e)
+      const music = await runSourceAction('musicSearch', sourceId, 5000, async () =>
+        findMusicByExt({ extensionId: source.extensionId, source: source.id, ...info })
+      )
+      if (music) return await handler(music)
+    } catch {
+      // Do not log extension errors verbatim: they can contain signed URLs.
+      console.warn(`Music fallback failed: ${source.id}; trying next source`)
     }
   }
-  excludeList.push(buildExtSourceId(source.extensionId, source.id))
-  return findSourceMusic(info, handler, excludeList)
 }
 
 const handleFindMusic = async <T>(

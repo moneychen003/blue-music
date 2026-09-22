@@ -8,6 +8,8 @@ import type { Update } from './update'
 
 autoUpdater.logger = log
 autoUpdater.autoDownload = false
+// Never install a previously cached upstream update when this custom build exits.
+autoUpdater.autoInstallOnAppQuit = false
 // autoUpdater.forceDevUpdateConfig = true
 
 // log.info('App starting...')
