@@ -1,4 +1,5 @@
 <script>
+  import Logo from './Logo.svelte'
   import Nav from './Nav.svelte'
   import MyList from './MyList/index.svelte'
 </script>
@@ -9,6 +10,7 @@
   {:else}
     <div style="height: 12px"></div>
   {/if}
+  <Logo />
   <Nav />
   <MyList />
 </div>
@@ -19,8 +21,10 @@
     display: flex;
     flex: none;
     flex-flow: column nowrap;
-    width: 224px;
-    max-width: 224px;
+    width: 218px;
+    max-width: 218px;
+    min-height: 0;
+    overflow-y: auto;
     // box-shadow: 0 0 5px rgba(0, 0, 0, .3);
     // transition: @transition-normal;
     // transition-property: background-color;

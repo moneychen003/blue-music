@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "id": "jide-open-music",
+  "files": {
+    "README.md": "73d064d75621e032b9ac4c7920ffd76115ae6d4f249374e78ae4f84b59121e19",
+    "main.js": "b20cbc50ca69d160e2cdbcfad55761a663627f9c9d99b5cbd8dd9eb670b71856",
+    "manifest.json": "8fcb31b04d54466f5b4c5b0465462df89297bae715868271d41ce596f1f28169"
+  }
+}

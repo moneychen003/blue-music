@@ -1,6 +1,6 @@
 {
   "name": "desktop",
-  "version": "1.1.0",
+  "version": "1.2.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/any-listen/any-listen-desktop.git"
@@ -31,7 +31,8 @@
     "publish:linux": "node build-config/build-pack.cjs target=linux arch=x64,arm64,armv7l type=deb,appImage,rpm,pacman publish=always",
     "publish": "node publish",
     "build": "vite build",
-    "rebuild:deps": "node ./build-config/before-install.cjs && electron-builder install-app-deps && node ./build-config/post-install.cjs"
+    "rebuild:deps": "node ./build-config/before-install.cjs && electron-builder install-app-deps && node ./build-config/post-install.cjs",
+    "pack:win:x64": "node build-config/build-pack.cjs target=win arch=x64 type=setup,portable"
   },
   "dependencies": {
     "@any-listen/app": "workspace:@shared/app@*",

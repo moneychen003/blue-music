@@ -55,6 +55,9 @@ export const createClientApp = (main: MainCall) => {
     async minWindow() {
       return main.minWindow()
     },
+    async toggleMaximizeWindow() {
+      return main.toggleMaximizeWindow()
+    },
     async closeWindow(isForce) {
       return main.closeWindow(isForce)
     },

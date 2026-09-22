@@ -1,3 +1,4 @@
+require('./builder-compat.cjs')
 const builder = require('electron-builder')
 const beforePack = require('./build-before-pack.cjs')
 const afterPack = require('./build-after-pack.cjs')
@@ -13,6 +14,8 @@ const rootPath = path.join(__dirname, '../../..')
  */
 const options = {
   appId: 'com.bluemusic.desktop',
+  // Official checksum-pinned NSIS 3.12 bundle includes a native Apple Silicon compiler.
+  toolsets: { nsis: '1.2.1' },
   productName: '技得音乐',
   extraMetadata: {
     // Stable internal identity preserves the existing userData directory.
@@ -49,7 +52,14 @@ const options = {
   asar: {
     smartUnpack: false,
   },
-  extraResources: ['./licenses'],
+  extraResources: [
+    './licenses',
+    { from: path.join(rootPath, 'extensions/jide-open-music'), to: 'bundled-extensions/jide-open-music', filter: ['manifest.json', 'main.js', 'README.md', 'bundle-lock.json'] },
+    {
+      from: path.join(rootPath, 'extensions/gdstudio'), to: 'bundled-extensions/gdstudio',
+      filter: ['manifest.json', 'main.js', 'i18n/en-us.json', 'i18n/zh-cn.json', 'resources/icon.png', 'ext.tgz', 'sig', 'bundle-lock.json', 'LICENSE', 'NOTICE.md'],
+    },
+  ],
   // Local custom builds must never inherit the upstream update feed.
   publish: null,
 }
@@ -60,12 +70,16 @@ const options = {
 const winOptions = {
   win: {
     icon: './resources/icons/icon.ico',
-    legalTrademarks: 'lyswhut',
+    legalTrademarks: 'Jide Music',
     // artifactName: '${productName}-${version}-${env.ARCH}-${env.TARGET}.${ext}',
   },
   artifactName: `\${productName}-\${version}-\${arch}.\${ext}`,
   nsis: {
     oneClick: false,
+    perMachine: false,
+    allowElevation: false,
+    packElevateHelper: false,
+    runAfterFinish: false,
     language: '2052',
     allowToChangeInstallationDirectory: true,
     differentialPackage: true,

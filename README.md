@@ -43,7 +43,7 @@ Windows 1.2.1 将兼容的 GD 0.3.2 和技得开放音乐资源保存在安装�
 ```sh
 pnpm install --frozen-lockfile
 pnpm dev:desktop
-# Windows 1.2.1 tag/current main (not this older Mac tag):
+# Windows 1.2.1 tag/current main:
 pnpm build:windows
 # Mac source tag v1.1.0:
 pnpm -F @shared/scripts build:desktop

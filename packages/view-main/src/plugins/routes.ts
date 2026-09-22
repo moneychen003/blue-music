@@ -20,7 +20,7 @@ const routes: ComponentProps<typeof Router>['routes'] = {
   '/curated': Netease,
   '/liked': Netease,
   '/recent': Netease,
-  '/playlist-detail': Netease,
+  '/playlist-detail': Library,
   '/online': Online,
   '/online/songlist': SonglistDetail,
   '/online/topSongs': TopSongsDetail,

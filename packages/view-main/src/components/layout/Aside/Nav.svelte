@@ -12,7 +12,7 @@
     [
       {
         to: '/curated',
-        name: '精选',
+        name: '发现音乐',
         icon: '#icon-album',
         iconSize: '0 0 425.2 425.2',
         enable: true,
@@ -47,7 +47,7 @@
       },
       {
         to: '/media-library',
-        name: '更多',
+        name: '本地与音乐库',
         icon: '#icon-album',
         iconSize: '0 0 425.2 425.2',
         enable: true,
@@ -69,7 +69,7 @@
       },
       {
         to: '/extenstion',
-        name: $t('extenstion'),
+        name: '音源管理',
         icon: '#icon-puzzle',
         iconSize: '0 0 24 24',
         enable: true,
@@ -80,7 +80,7 @@
 
   let menuSections = $derived([
     {
-      title: '',
+      title: '在线音乐',
       items: menus.filter((m) => ['/curated', '/topSongs'].includes(m.to)),
     },
     {
@@ -122,15 +122,15 @@
     <a
       class="link"
       class:active={activePath == item.to}
-      role="tab"
+
       data-ignore-tip
-      aria-selected={activePath == item.to}
+      aria-current={activePath == item.to ? 'page' : undefined}
       href={item.to}
       onclick={item.onclick}
       aria-label={item.name}
       {@attach link({ disabled: !!item.onclick })}
     >
-      <!-- <a class="link" class:active={activePath == item.to} role="tab" href={item.to} aria-label={item.name}> -->
+      <!-- <a class="link" class:active={activePath == item.to}  href={item.to} aria-label={item.name}> -->
       <div class="left">
         <div class="icon">
           <svg viewBox={item.iconSize}>
@@ -157,7 +157,7 @@
 {#snippet extensonItem()}
   {@render listItem({
     to: '/extenstion',
-    name: $t('extenstion'),
+    name: '音源管理',
     icon: '#icon-puzzle',
     iconSize: '0 0 24 24',
     enable: true,
@@ -166,7 +166,7 @@
   })}
 {/snippet}
 
-<div class="aside-nav" role="menu">
+<nav class="aside-nav" aria-label="主导航">
   {#each menuSections as section (section.title)}
     {#if section.items.length}
       <section class="nav-section" aria-label={section.title}>
@@ -183,20 +183,20 @@
       </section>
     {/if}
   {/each}
-  <section class="nav-section" aria-label="插件">
-    <h2>插件</h2>
+  <section class="nav-section" aria-label="音源">
+    <h2>音源</h2>
     <ul>
       {@render extensonItem()}
     </ul>
   </section>
-</div>
+</nav>
 
 <style lang="less">
   .aside-nav {
     display: flex;
     flex: none;
     flex-flow: column nowrap;
-    gap: 18px;
+    gap: 12px;
     padding: 8px 12px 0;
   }
   .nav-section {
@@ -228,7 +228,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    min-height: 36px;
+    min-height: 38px;
     padding: 0 10px;
     color: var(--color-primary-font);
     text-decoration: none;
@@ -259,6 +259,7 @@
       }
     }
 
+    &:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
     &:hover {
       // color: var(--color-primary-font);
 

@@ -16,11 +16,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # win 用 7z 绿色版(解压即用):electron-builder 26.13.1 的 nsis/makensis 路径有 spawnAndWriteWithOutput bug,绕开
+          # Windows: genuine NSIS installer + portable executable (not a renamed archive)
           - os: windows-latest
             platform: win
-            packcmd: pnpm -F desktop pack:win:7z:x64
-            artifact: build/*.7z
+            packcmd: pnpm -F desktop pack:win:x64
+            artifact: build/*.exe
           - os: macos-latest
             platform: mac-arm64
             packcmd: pnpm -F desktop pack:mac:dmg:arm64
@@ -64,10 +64,14 @@ jobs:
       - name: Package (${{ matrix.platform }})
         run: ${{ matrix.packcmd }}
 
+      - name: Verify Windows executable package
+        if: matrix.platform == 'win'
+        run: node scripts/verify-windows-package.cjs build
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: blue-music-${{ matrix.platform }}
+          name: jide-music-${{ matrix.platform }}
           path: ${{ matrix.artifact }}
           if-no-files-found: error
 

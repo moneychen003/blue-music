@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getSourceId, urlParamKeyMap, useResourceList, type SourceType, type ViewType } from '../shared.svelte'
-  import { location, query } from '@/plugins/routes'
+  import { location, query, link } from '@/plugins/routes'
   import { untrack } from 'svelte'
   import List from './list/List.svelte'
   import Source from '../Source.svelte'
@@ -43,6 +43,8 @@
   {/if}
   {#if activeSource}
     <List source={activeSource} />
+  {:else if !sList.length}
+    <section class="source-empty"><h2>当前音源暂无排行榜</h2><p>排行榜需要支持此能力的扩展；你仍可以搜索音乐或播放本地收藏。</p><a href="/extenstion" {@attach link()}>打开音源管理 →</a></section>
   {/if}
 </div>
 
@@ -54,4 +56,8 @@
     min-height: 0;
     padding: 10px 18px 0;
   }
+  .source-empty { margin: auto; max-width: 420px; padding: 28px; text-align: center; }
+  .source-empty h2 { font-size: 19px; margin-bottom: 14px; }
+  .source-empty p { color: var(--color-font-label); line-height: 1.8; margin-bottom: 20px; }
+  .source-empty a { color: var(--color-primary); }
 </style>

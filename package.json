@@ -19,7 +19,8 @@
     "pub": "pnpm pub:desktop",
     "pub:desktop": "pnpm -F @shared/publish pub desktop",
     "pub:web": "pnpm -F @shared/publish pub web-server",
-    "fmt": "oxfmt"
+    "fmt": "oxfmt",
+    "build:windows": "node scripts/build-windows.cjs"
   },
   "devDependencies": {
     "@any-listen/eslint": "workspace:@shared/eslint@^",

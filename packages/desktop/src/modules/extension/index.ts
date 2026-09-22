@@ -8,6 +8,8 @@ import { appEvent, appState } from '@/app'
 import { playerEvent } from '@/modules/player'
 import { startExtensionServiceWorker } from '@/worker'
 
+import { installBundledExtension } from './bundled'
+
 const setupExtension = async () => {
   await workers.extensionService.setExtensionState({
     locale: appState.appSetting['common.langId'] ?? DEFAULT_LANG,
@@ -30,6 +32,13 @@ const setupExtension = async () => {
 export const initExtension = async () => {
   extensionState.extensionDir = joinPath(appState.dataPath, STORE_NAMES.EXTENSION)
   await checkAndCreateDir(extensionState.extensionDir)
+  if (process.platform === 'win32') {
+    await installBundledExtension(joinPath(process.resourcesPath, 'bundled-extensions'), extensionState.extensionDir).catch(
+      (error: unknown) => {
+        console.warn('Bundled extension initialization skipped:', error)
+      }
+    )
+  }
   await setupExtension()
 
   appEvent.on('updated_config', (keys, setting) => {

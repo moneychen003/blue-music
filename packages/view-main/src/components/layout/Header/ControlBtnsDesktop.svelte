@@ -2,7 +2,7 @@
   import { appEvent } from '@/modules/app/store/event'
   import { t } from '@/plugins/i18n'
   // import { link, location } from '@/plugins/routes'
-  import { closeWindow, minWindow } from '@/shared/ipc/app'
+  import { closeWindow, minWindow, toggleMaximizeWindow } from '@/shared/ipc/app'
   import { onMount } from 'svelte'
   let domBtns = $state<HTMLDivElement>()
 
@@ -70,6 +70,11 @@
   <button type="button" class="btn min" data-click-hide aria-label={$t('min')} onclick={minWindow}>
     <svg version="1.1" class="svg" viewBox="0 0 24 24">
       <use xlink:href="#icon-window-minimize-2" />
+    </svg>
+  </button>
+  <button type="button" class="btn maximize" data-click-hide aria-label="最大化 / 还原" onclick={toggleMaximizeWindow}>
+    <svg class="svg" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="5" y="5" width="14" height="14" rx="1" fill="none" stroke="currentColor" stroke-width="1.5" />
     </svg>
   </button>
   <button type="button" class="btn close" data-click-hide aria-label={$t('close')} onclick={closeWindow}>

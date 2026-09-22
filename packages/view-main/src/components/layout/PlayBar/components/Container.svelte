@@ -10,18 +10,19 @@
   } = $props()
 </script>
 
-<div class="player">
+<section class="player" aria-label="播放控制">
   <div class="bg"></div>
   <div class="player-inner" class:padding>
     {@render children()}
   </div>
-</div>
+</section>
 
 <style lang="less">
   .player {
     position: relative;
     // padding: 6px;
     z-index: 2;
+    flex: none;
     height: @height-player;
     background-color: var(--color-main-background);
     border-top: 1px solid var(--color-border);
@@ -30,7 +31,7 @@
     // flex-flow: row nowrap;
     // align-items: center;
     contain: size layout style;
-    // box-shadow: 0 0 6px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 -4px 22px rgb(0 0 0 / 4%);
     // border-top-left-radius: 8px;
     // border-top-right-radius: 8px;
     // backdrop-filter: blur(4px);
