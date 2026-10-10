@@ -71,67 +71,6 @@
       }
     }
   }
-  .right {
-    display: flex;
-    flex: none;
-    gap: 10px;
-    align-items: center;
-    height: 100%;
-    padding-right: 14px;
-
-    button {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 28px;
-      height: 28px;
-      color: var(--color-font-label);
-      cursor: pointer;
-      background: transparent;
-      border: 0;
-      border-radius: 6px;
-      transition: background-color 0.18s ease, color 0.18s ease;
-
-      &:hover {
-        color: var(--color-font);
-        background: var(--color-primary-background-hover);
-      }
-    }
-  }
-  .profile {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    max-width: 190px;
-    color: var(--color-font);
-  }
-  .avatar {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    font-size: 13px;
-    font-weight: 800;
-    color: rgb(255 255 255);
-    background: linear-gradient(135deg, #f4c35b, #e85d5d);
-    border-radius: 50%;
-  }
-  .name {
-    max-width: 110px;
-    font-size: 14px;
-    font-weight: 700;
-    .mixin-ellipsis-1();
-  }
-  .vip {
-    padding: 1px 5px;
-    font-size: 10px;
-    color: #ffd4ac;
-    background: rgb(118 77 56 / 45%);
-    border: 1px solid rgb(255 194 142 / 28%);
-    border-radius: 999px;
-  }
-
   // .logo {
   //   box-sizing: border-box;
   //   padding: 0 @height-toolbar * .4;

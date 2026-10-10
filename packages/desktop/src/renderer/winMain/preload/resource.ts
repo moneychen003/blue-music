@@ -9,6 +9,9 @@ export const createClientResource = (main: MainCall) => {
     async hotSearch(info) {
       return main.hotSearch(info)
     },
+    async cancelMusicSearch(requestId) {
+      return main.cancelMusicSearch(requestId)
+    },
     async musicSearch(info) {
       return main.musicSearch(info)
     },

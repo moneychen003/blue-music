@@ -20,10 +20,12 @@
     "allowJs": true,
     "checkJs": true,
     "isolatedModules": true,
+    "skipLibCheck": true,
     "rootDir": "./",
     "outDir": "../../dist",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@any-listen/web/lyric-font-player": ["./src/types/lyric-font-player.d.ts"]
     },
     "types": ["@any-listen/types"]
   },

@@ -18,6 +18,7 @@
     children,
     rawtype = 'button',
     'aria-label': arialabel,
+    'aria-pressed': ariaPressed,
   }: {
     min?: boolean
     middle?: boolean
@@ -26,6 +27,7 @@
     disabled?: boolean
     loading?: boolean
     'aria-label'?: string
+    'aria-pressed'?: boolean | 'mixed'
     icon?: boolean
     icontext?: boolean
     rawtype?: 'button' | 'submit' | 'reset'
@@ -37,6 +39,7 @@
   } = $props()
 
   let asyncLoading = $state(false)
+  let actionFailed = $state(false)
 </script>
 
 <button
@@ -44,15 +47,21 @@
   class={['btn', { min, middle, outline, link, icon, icontext, loading: loading || asyncLoading }]}
   tabindex="0"
   aria-label={arialabel}
+  aria-pressed={ariaPressed}
+  aria-busy={loading || asyncLoading}
+  title={actionFailed ? '操作失败，请重试' : undefined}
   disabled={disabled || loading || asyncLoading}
-  onclick={(event) => {
-    if (!onclick) return
-    let p = onclick(event)
-    if (p instanceof Promise) {
-      asyncLoading = true
-      void p.finally(() => {
-        asyncLoading = false
-      })
+  onclick={async (event) => {
+    if (!onclick || disabled || loading || asyncLoading) return
+    actionFailed = false
+    asyncLoading = true
+    try {
+      await onclick(event)
+    } catch {
+      console.warn('Button action failed')
+      actionFailed = true
+    } finally {
+      asyncLoading = false
     }
   }}
   {oncontextmenu}
@@ -60,6 +69,7 @@
   {onmouseleave}
 >
   {@render children()}
+  {#if actionFailed}<span class="action-error" role="alert">操作失败，请重试</span>{/if}
 </button>
 
 <style lang="less">
@@ -125,9 +135,12 @@
       gap: 2px;
     }
 
-    // TODO: loading
-    &.loading {
+    &:focus-visible {
+      outline: 2px solid var(--color-primary);
+      outline-offset: 3px;
     }
+    &.loading { cursor: wait; }
+    .action-error { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   }
   .middle {
     padding: 6px 12px;

@@ -21,15 +21,3 @@
     <Selection {value} {list} itemkey="value" itemname="label" {onchange} />
   </div>
 </TitleContent>
-
-<style lang="less">
-  .settings-item-selection {
-    // :global {
-    //   .select {
-    //     // margin-top: 5px;
-    //     // font-size: 14px;
-    //   }
-    // }
-    // margin-left: 16px;
-  }
-</style>

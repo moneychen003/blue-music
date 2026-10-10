@@ -7,6 +7,8 @@ export const hotSearch: AnyListen.IPC.ServerIPC['hotSearch'] = async (info) => {
   return ipc.hotSearch(info)
 }
 
+export const cancelMusicSearch: AnyListen.IPC.ServerIPC['cancelMusicSearch'] = async (requestId) => ipc.cancelMusicSearch(requestId)
+
 export const musicSearch: AnyListen.IPC.ServerIPC['musicSearch'] = async (info) => {
   return ipc.musicSearch(info)
 }

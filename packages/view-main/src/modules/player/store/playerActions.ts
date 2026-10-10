@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition */
 // import { checkMusicFileAvailable } from '@renderer/utils/music'
 
+import { matchingFavoriteIds } from '@any-listen/common/musicIdentity'
 import { LIST_IDS } from '@any-listen/common/constants'
 import { createPlayMusicInfo, createPlayMusicInfoList } from '@any-listen/common/tools'
 import { getRandom } from '@any-listen/common/utils'
@@ -9,7 +10,7 @@ import { checkPicUrl } from '@any-listen/web'
 import { showNotify } from '@/components/apis/notify'
 import { executeLocalCommand } from '@/modules/app/store/action'
 import { addInfo } from '@/modules/dislikeList/actions'
-import { addListMusics, parseMusicMetadata, removeListMusics, updateListMusic } from '@/modules/musicLibrary/store/actions'
+import { addListMusics, getListMusics, parseMusicMetadata, removeListMusics, updateListMusic } from '@/modules/musicLibrary/store/actions'
 import { songlistDetailAll } from '@/modules/resource/songlist/detail/actions'
 import { topSongsDetailAll } from '@/modules/resource/topSongs/detail/actions'
 import { settingState } from '@/modules/setting/store/state'
@@ -17,6 +18,7 @@ import { i18n } from '@/plugins/i18n'
 import { getSrc, isEmpty, releasePlayer, setPause, setPlay, setResource, setStop } from '@/plugins/player'
 import { parseInterval } from '@/shared'
 
+import { playbackSource } from './sourceStatus'
 import * as commit from './commit'
 import { playerEvent } from './event'
 import { setPlayListMusic, setPlayListMusicPlayed, setPlayListMusicUnplayedAll } from './listRemoteAction'
@@ -134,7 +136,6 @@ const getMusicPlayUrl = async (
 
   return getMusicUrl({ musicInfo, isRefresh, quality })
     .then((info) => {
-      console.log('url', info.url)
       if (diffCurrentMusicInfo(musicInfo)) return { url: null }
       // console.log(url)
       return { url: info.url, otherSource: info.otherSource }
@@ -158,18 +159,21 @@ export const setMusicUrl = (musicInfo: AnyListen.Music.MusicInfo, isRefresh?: bo
   if (!playerState.playing || !diffCurrentMusicInfo(musicInfo)) return
   // if (cancelDelayRetry) cancelDelayRetry()
   gettingUrlId = musicInfo.id
+  playbackSource.set(null)
   void getMusicPlayUrl(musicInfo, isRefresh)
     .then((res) => {
       if (!res.url) return
       setResource(res.url)
+      const actualSource = res.otherSource?.meta.source ?? (musicInfo.isLocal ? 'local' : musicInfo.meta.source)
+      playbackSource.set({ musicId: musicInfo.id, name: getSourceName(actualSource) })
       // 发生自动换源:提示用户实际使用的音源(后端已把可用源记忆,下次直接用)
-      if (res.otherSource?.meta?.source && res.otherSource.meta.source !== musicInfo.meta.source) {
+      if (res.otherSource && !musicInfo.isLocal && res.otherSource.meta.source !== musicInfo.meta.source) {
         showNotify(i18n.t('player__switched_source', { name: getSourceName(res.otherSource.meta.source) }))
       }
     })
     .catch((err: Error) => {
-      console.log(err)
-      commit.setStatusText(err.message)
+      console.warn('Music operation failed')
+      commit.setStatusText('播放失败，请重试或切换音源')
       playerEvent.error()
       if (settingState.setting['player.autoSkipOnError']) addDelayNextTimeout()
     })
@@ -279,7 +283,7 @@ const setMetadata = async (info: AnyListen.Player.PlayMusicInfo) => {
       playerEvent.lyricUpdated(lyricInfo.info)
     })
     .catch((err) => {
-      console.log(err)
+      console.warn('Music operation failed')
       if (info.musicInfo.id != playerState.playMusicInfo?.musicInfo.id) return
       commit.setStatusText(i18n.t('lyric__load_error'))
     })
@@ -802,17 +806,25 @@ export const togglePlay = () => {
 /**
  * 收藏当前播放的歌曲
  */
-export const collectMusic = async () => {
-  if (!playerState.playMusicInfo) return
-  return addListMusics(LIST_IDS.LOVE, [playerState.playMusicInfo.musicInfo])
+export const collectMusic = async (music = playerState.playMusicInfo?.musicInfo) => {
+  if (!music) return false
+  await addListMusics(LIST_IDS.LOVE, [music])
+  const list = await getListMusics(LIST_IDS.LOVE, true)
+  const collected = matchingFavoriteIds(list, music).length > 0
+  if (!collected) throw new Error('Favorite write was not confirmed')
+  return collected
 }
 
-/**
- * 取消收藏当前播放的歌曲
- */
-export const uncollectMusic = () => {
-  if (!playerState.playMusicInfo) return
-  void removeListMusics(LIST_IDS.LOVE, [playerState.playMusicInfo.musicInfo.id])
+/** Remove the same stored identity used by the collected-state check. */
+export const uncollectMusic = async (music = playerState.playMusicInfo?.musicInfo) => {
+  if (!music) return false
+  const list = await getListMusics(LIST_IDS.LOVE, true)
+  const ids = matchingFavoriteIds(list, music)
+  if (ids.length) await removeListMusics(LIST_IDS.LOVE, ids)
+  const remaining = await getListMusics(LIST_IDS.LOVE, true)
+  const collected = matchingFavoriteIds(remaining, music).length > 0
+  if (collected) throw new Error('Favorite removal was not confirmed')
+  return collected
 }
 
 /**

@@ -48,6 +48,7 @@ declare namespace AnyListen {
     type ServerActions = WarpPromiseRecord<{
       tipSearch: (params: IPCExtension.TipSearchParams) => Promise<string[]>
       hotSearch: (params: IPCExtension.CommonParams) => Promise<string[]>
+      cancelMusicSearch: (requestId: string) => Promise<void>
       musicSearch: (params: IPCExtension.MusicSearchParams) => Promise<MusicListResult>
       musicPicSearch: (params: IPCExtension.PicSearchParams) => Promise<string[]>
       lyricSearch: (params: IPCExtension.LyricSearchParams) => Promise<IPCExtension.LyricSearchResult[]>

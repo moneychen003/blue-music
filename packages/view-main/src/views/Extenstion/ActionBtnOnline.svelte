@@ -4,8 +4,7 @@
   import Btn from '@/components/base/Btn.svelte'
   import { disableExtension, enableExtension, uninstallExtension } from '@/modules/extension/store/actions'
   import type { ComponentExports } from 'svelte'
-  import type { OnlineListItem } from '@/modules/extension/store/state'
-  let { ext }: { ext: OnlineListItem } = $props()
+  let { ext }: { ext: AnyListen.IPCExtension.OnlineListItem } = $props()
   let poupBtn = $state<ComponentExports<typeof PopupBtn> | null>(null)
 </script>
 

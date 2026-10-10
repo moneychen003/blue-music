@@ -9,6 +9,7 @@ import {
   setPlayMusicInfo,
   setPlayTime,
 } from '@any-listen/app/modules/player'
+import { matchingFavoriteIds } from '@any-listen/common/musicIdentity'
 import { LIST_IDS } from '@any-listen/common/constants'
 
 import { appEvent, appState } from '@/app/app'
@@ -71,25 +72,27 @@ const updateLatestPlayList = async (info: AnyListen.Player.PlayMusicInfo) => {
 }
 
 const checkCollect = async (minfo: AnyListen.Player.PlayMusicInfo) => {
-  if (minfo.listId == LIST_IDS.LOVE) return true
-  // 先按精确 id;再按 歌名+歌手 回退,让同一首歌换源/换入口播放也能认出已收藏
-  if (workers.dbService.checkListExistMusic(LIST_IDS.LOVE, minfo.musicInfo.id)) return true
-  return workers.dbService.checkListExistMusicByName(LIST_IDS.LOVE, minfo.musicInfo.name, minfo.musicInfo.singer)
+  const list = await workers.dbService.getListMusics(LIST_IDS.LOVE)
+  return matchingFavoriteIds(list, minfo.musicInfo).length > 0
 }
 export const initPlayer = async () => {
   initPlayerModule(workers.dbService, appState.dataPath)
   let prevCollectStatus = false
+  let collectGeneration = 0
   playerEvent.on('musicChanged', async (index, historyIndex, lastTrackId) => {
+    const generation = ++collectGeneration
     void setPlayMusic(index, historyIndex, lastTrackId)
     const prevMusic = getPlayMusicInfo()
     const targetMusic = await getPlayerMusic()
+    if (generation !== collectGeneration) return
     setPlayMusicInfo(targetMusic)
     if (targetMusic) {
       void updateLatestPlayList(targetMusic)
       void checkCollect(targetMusic).then((isCollect) => {
+        if (generation !== collectGeneration) return
         prevCollectStatus = isCollect
         playerEvent.collectStatus(isCollect)
-      })
+      }).catch(() => { console.warn('Favorite state refresh failed') })
       // TODO play count
       // let mInfo = getMusicInfo(targetMusic.musicInfo)
       // workers.dbService.playCountAdd({ name: mInfo.name, singer: mInfo.singer })

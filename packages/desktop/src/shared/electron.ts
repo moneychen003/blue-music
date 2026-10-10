@@ -1,6 +1,14 @@
 import { app, clipboard, session, shell } from 'electron'
 
-import { isUrl } from './utils'
+export const isSafeExternalUrl = (url: unknown): url is string => {
+  if (typeof url !== 'string' || url.length > 8192) return false
+  try {
+    const parsed = new URL(url)
+    return (parsed.protocol === 'https:' || parsed.protocol === 'http:') && !!parsed.hostname && !parsed.username && !parsed.password
+  } catch {
+    return false
+  }
+}
 
 /**
  * 在资源管理器中打开目录
@@ -15,7 +23,7 @@ export const openDirInExplorer = (dir: string) => {
  * @param {*} url
  */
 export const openUrl = async (url: string) => {
-  if (!isUrl(url)) return
+  if (!isSafeExternalUrl(url)) return
   await shell.openExternal(url)
 }
 

@@ -75,17 +75,21 @@ const updateLatestPlayList = async (info: AnyListen.Player.PlayMusicInfo) => {
 export const initPlayer = async () => {
   initPlayerModule(workers.dbService, appState.dataPath)
   let prevCollectStatus = false
+  let collectGeneration = 0
   playerEvent.on('musicChanged', async (index, historyIndex, lastTrackId) => {
+    const generation = ++collectGeneration
     void setPlayMusic(index, historyIndex, lastTrackId)
     const prevMusic = getPlayMusicInfo()
     const targetMusic = await getPlayerMusic()
+    if (generation !== collectGeneration) return
     setPlayMusicInfo(targetMusic)
     if (targetMusic) {
       void updateLatestPlayList(targetMusic)
       void checkCollect(targetMusic).then((isCollect) => {
+        if (generation !== collectGeneration) return
         prevCollectStatus = isCollect
         playerEvent.collectStatus(isCollect)
-      })
+      }).catch(() => { console.warn('Favorite state refresh failed') })
       // TODO play count
       // let mInfo = getMusicInfo(targetMusic.musicInfo)
       // workers.dbService.playCountAdd({ name: mInfo.name, singer: mInfo.singer })

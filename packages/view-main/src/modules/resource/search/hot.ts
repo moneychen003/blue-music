@@ -31,7 +31,7 @@ const setCachedListInfo = (extId: string, source: string, promise: Promise<strin
     sourceKey,
     promise.catch((error) => {
       tagState.lists.delete(sourceKey)
-      console.log(error)
+      console.warn('Resource request failed')
       throw error
     })
   )
@@ -43,7 +43,7 @@ export const getData = async (extensionId: string, source: string): Promise<stri
   if (cacheListInfo) return cacheListInfo
 
   const promise = hotSearch({ extensionId, source }).then((result) => {
-    console.log(result)
+
     return result
   })
   setCachedListInfo(extensionId, source, promise)

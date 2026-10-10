@@ -1,5 +1,5 @@
 import { execSync, spawn } from 'node:child_process'
-import { builtinModules } from 'node:module'
+import { builtinModules, createRequire } from 'node:module'
 import path from 'node:path'
 
 import electron from 'electron'
@@ -143,6 +143,22 @@ export const buildConfig = (mode: string): UserConfig => {
         logLevel: 'warn',
       },
     },
+    plugins: [{
+      name: 'sandbox-preload-single-file',
+      async closeBundle() {
+        const require = createRequire(path.join(rootPath, 'packages/shared/scripts/package.json'))
+        const { build: bundle } = require('esbuild')
+        for (const [name, file] of [['view-main.preload', 'winMain'], ['view-lyric.preload', 'winLyric']]) {
+          await bundle({
+            entryPoints: [path.join(projectPath, `src/renderer/${file}/preload/index.ts`)],
+            outfile: path.join(projectPath, `dist/electron/${name}.js`),
+            bundle: true, platform: 'browser', format: 'cjs', target: 'chrome120',
+            external: ['electron'], alias: { '@': path.join(projectPath, 'src') },
+            define: { 'import.meta.env.DEV': JSON.stringify(!isProd), 'import.meta.env.PROD': JSON.stringify(isProd) },
+          })
+        }
+      },
+    }],
     define: {
       'process.env.NODE_ENV': `"${process.env.NODE_ENV!}"`,
       'process.env.WS_NO_BUFFER_UTIL': 'true',

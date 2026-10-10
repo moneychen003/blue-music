@@ -2,6 +2,7 @@ import {
   tipSearch,
   hotSearch,
   musicSearch,
+  cancelMusicSearch,
   musicPicSearch,
   lyricSearch,
   getLyric,
@@ -27,6 +28,9 @@ export const createExposeResource = () => {
     },
     async hotSearch(event, info) {
       return hotSearch(info)
+    },
+    async cancelMusicSearch(event, requestId) {
+      return cancelMusicSearch(requestId)
     },
     async musicSearch(event, info) {
       return musicSearch(info)

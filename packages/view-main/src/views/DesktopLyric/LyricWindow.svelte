@@ -135,9 +135,7 @@
   // 锁定:整窗鼠标穿透(到 dock/桌面),hover 到锁按钮时临时可点用于解锁
   let locked = $state(false)
   let lockBtnEl = $state<HTMLButtonElement | undefined>(undefined)
-  const lyricWin = () =>
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).__lyricWin as { setIgnoreMouse: (b: boolean) => void; setLock: (b: boolean) => void } | undefined
+  const lyricWin = () => window.__lyricWin
   const applyLockState = (l: boolean) => {
     locked = l
     if (!l) lyricWin()?.setIgnoreMouse(false) // 解锁:恢复整窗可交互
@@ -164,22 +162,16 @@
       root.style.backgroundColor = 'transparent'
       root.style.backgroundImage = 'none'
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = window as any
-    w.__onLyricPort = bindPort
-    if (w.__pendingLyricPort) {
-      bindPort(w.__pendingLyricPort)
-      w.__pendingLyricPort = null
+    const onPort = (event: MessageEvent) => {
+      if (event.source !== window || event.data?.source !== 'anylisten-lyric-preload' || event.data?.type !== 'port') return
+      if (event.ports.length === 1) bindPort(event.ports[0])
     }
-    // 锁定状态:主进程下发初始值
-    w.__onLyricLockState = applyLockState
-    if (typeof w.__pendingLyricLock == 'boolean') {
-      applyLockState(w.__pendingLyricLock)
-      w.__pendingLyricLock = undefined
-    }
+    window.addEventListener('message', onPort)
+    lyricWin()?.ready(applyLockState)
     window.addEventListener('mousemove', onMouseMove)
     return () => {
       cancelAnimationFrame(raf)
+      window.removeEventListener('message', onPort)
       window.removeEventListener('mousemove', onMouseMove)
     }
   })

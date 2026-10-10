@@ -5,10 +5,28 @@
   import ListItem from './ListItem.svelte'
   import Empty from '@/components/material/Empty.svelte'
   import { playerState } from '@/modules/player/store/state'
-  import { musicClick } from '@/components/common/MusicList/List/action'
+  import { playIndex } from '@/modules/player/store/actions'
 
   let listItemHeight = useListItemHeight(3.2)
   let picstyle = $derived(`height:${listItemHeight.val * 0.8}px; width:${listItemHeight.val * 0.8}px;`)
+  let lastClickIndex = -1
+  let lastClickTime = 0
+
+  const handleItemClick = (index: number, isKey: boolean) => {
+    if (isKey) {
+      playIndex(index)
+      return
+    }
+    const now = performance.now()
+    if (lastClickIndex === index && now - lastClickTime <= 400) {
+      lastClickIndex = -1
+      lastClickTime = 0
+      playIndex(index)
+      return
+    }
+    lastClickIndex = index
+    lastClickTime = now
+  }
 </script>
 
 <div class="container">
@@ -30,8 +48,7 @@
           {index}
           playing={$playInfo.index == index}
           onclick={(isKey) => {
-            void musicClick(item.listId, item.musicInfo)
-            if (isKey) void musicClick(item.listId, item.musicInfo)
+            handleItemClick(index, isKey)
           }}
         />
       {/snippet}

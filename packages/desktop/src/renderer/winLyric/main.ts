@@ -11,6 +11,11 @@ import { throttle } from '@/shared/utils'
 import { getWebContents } from '../winMain/main'
 
 let lyricWindow: Electron.BrowserWindow | null = null
+const isLyricSender = (event: Electron.IpcMainEvent) => {
+  const contents = lyricWindow?.webContents
+  if (!contents) return false
+  return event.sender === contents && event.senderFrame === contents.mainFrame
+}
 
 let ipcRegistered = false
 // 歌词窗渲染器 → 主进程的控制通道(只注册一次)
@@ -18,11 +23,13 @@ const registerLyricIpc = () => {
   if (ipcRegistered) return
   ipcRegistered = true
   // 锁定时整窗鼠标穿透;hover 解锁按钮时渲染器临时设 false 让点击落地
-  ipcMain.on('desktop-lyric-ignore-mouse', (_e, ignore: boolean) => {
+  ipcMain.on('desktop-lyric-ignore-mouse', (event, ignore: boolean) => {
+    if (!isLyricSender(event) || typeof ignore !== 'boolean') return
     lyricWindow?.setIgnoreMouseEvents(!!ignore, { forward: true })
   })
   // 切换锁定并持久化(updateSetting 会触发 updated_config → applyLock)
-  ipcMain.on('desktop-lyric-set-lock', (_e, lock: boolean) => {
+  ipcMain.on('desktop-lyric-set-lock', (event, lock: boolean) => {
+    if (!isLyricSender(event) || typeof lock !== 'boolean') return
     updateSetting({ 'desktopLyric.isLock': !!lock })
   })
 }
@@ -88,10 +95,11 @@ export const createLyricWindow = () => {
     show: false,
     webPreferences: {
       preload: preloadUrl,
-      contextIsolation: false,
+      contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
-      webSecurity: false,
+      nodeIntegrationInWorker: false,
+      sandbox: true,
+      webSecurity: true,
       spellcheck: false,
     },
   }

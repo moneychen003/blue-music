@@ -278,7 +278,15 @@
     {/if}
   {:else if activePage == 'liked'}
     <section class="playlist-hero">
-      <img src={loveCover.val || loveMusics[0]?.meta.picUrl || brandIcon} alt="" />
+      <img
+        src={loveCover.val || loveMusics[0]?.meta.picUrl || brandIcon}
+        alt=""
+        onerror={(event) => {
+          const image = event.currentTarget
+          if (!(image instanceof HTMLImageElement)) return
+          if (image.src !== brandIcon) image.src = brandIcon
+        }}
+      />
       <div>
         <h1>{loveListInfo?.name || pageTitle}</h1>
         <p>共 {loveMusics.length} 首</p>

@@ -25,7 +25,7 @@ const setCachedListInfo = (extId: string, source: string, id: string, promise: P
     sourceKey,
     promise.catch((error) => {
       dateState.lists.delete(sourceKey)
-      console.log(error)
+      console.warn('Resource request failed')
       throw error
     })
   )
@@ -37,7 +37,7 @@ export const getData = async (extensionId: string, source: string, id: string): 
   if (cacheListInfo) return cacheListInfo
 
   const promise = topSongsDate({ extensionId, source, id }).then((result) => {
-    console.log(result)
+
     return result
   })
   setCachedListInfo(extensionId, source, id, promise)

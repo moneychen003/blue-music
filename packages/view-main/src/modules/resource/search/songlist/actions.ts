@@ -88,7 +88,7 @@ const setCachedListInfo = (
         listInfo.page = 0
         listInfo.total = 0
       }
-      console.log(error)
+      console.warn('Resource request failed')
       throw error
     })
 }
@@ -103,7 +103,7 @@ export const search = (
   promise: Promise<AnyListen.IPCResource.SonglistListResult>
   total: number
 } => {
-  console.log(extensionId, source, keyword, page, limit)
+
   if (!keyword.trim().length) {
     return {
       promise: Promise.resolve({
@@ -129,7 +129,7 @@ export const search = (
     limit,
     page,
   }).then((result) => {
-    console.log(result)
+
     return result
   })
   setCachedListInfo(extensionId, source, page, limit, keyword, promise)

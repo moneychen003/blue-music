@@ -17,6 +17,7 @@
   import { i18n, t, type Message } from '@/plugins/i18n'
   import { openDirInExplorer } from '@/shared/ipc/app'
   import { getUserListsAll, userListsAll } from '@/modules/musicLibrary/reactive.svelte'
+  import { buildLibrarySearchIndex, searchLibraryIndex } from '@any-listen/common/librarySearch'
   import { LIST_IDS } from '@any-listen/common/constants'
   import { buildMusicName, buildSourceLabel } from '@any-listen/common/tools'
   import { onMount } from 'svelte'
@@ -145,22 +146,17 @@
         return []
     }
   })
+  const libraryIndex = $derived(buildLibrarySearchIndex(entries.map((entry) => ({
+    key: entry.key,
+    fields: [entry.musicInfo.name, entry.musicInfo.singer, entry.musicInfo.meta.albumName, entry.listName, getMusicFolder(entry.musicInfo)],
+  }))))
   const filteredEntries = $derived.by(() => {
     let list = activeTab == 'metadata' ? metadataEntries : entries
     if (activeTab == 'artist' || activeTab == 'album' || activeTab == 'folder') {
       const group = currentGroups.find((item) => item.key == selectedGroup)
       list = group?.items ?? []
     }
-    const text = normalize(searchText)
-    if (text) {
-      list = list.filter((entry) => {
-        const musicInfo = entry.musicInfo
-        return [musicInfo.name, musicInfo.singer, musicInfo.meta.albumName, entry.listName, getMusicFolder(musicInfo)]
-          .map(normalize)
-          .some((value) => value.includes(text))
-      })
-    }
-    return list
+    return searchLibraryIndex(list, libraryIndex, searchText)
   })
   const shownEntries = $derived(filteredEntries.slice(0, 500))
 

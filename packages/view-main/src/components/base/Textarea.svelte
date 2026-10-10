@@ -65,13 +65,13 @@
     // }
   }
 
-  if (autofocus) {
-    onMount(() => {
+  onMount(() => {
+    if (autofocus) {
       void tick().then(() => {
         domInput.focus()
       })
-    })
-  }
+    }
+  })
 </script>
 
 <textarea

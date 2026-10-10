@@ -3,6 +3,7 @@
   import { musicInfo, playerPlaying, statusText } from '@/modules/player/reactive.svelte'
   import { useSettingValue } from '@/modules/setting/reactive.svelte'
   import { buildMusicName } from '@any-listen/common/tools'
+  import { playbackSource } from '@/modules/player/store/sourceStatus'
   import CollectBtn from '@/components/common/CollectBtn.svelte'
   let nameFormat = useSettingValue('download.fileName')
 
@@ -18,6 +19,7 @@
   <div class="name-row">
     <p class="name">{musicLabel}</p>
     <CollectBtn />
+    {#if $playbackSource?.musicId === $musicInfo.id}<span class="source-badge" title="实际播放来源">{$playbackSource.name}</span>{/if}
   </div>
   <p class="status-text">{status}</p>
 </div>
@@ -45,6 +47,7 @@
     .mixin-ellipsis-1();
   }
 
+  .source-badge { flex: none; max-width: 100px; overflow: hidden; font-size: 11px; color: var(--color-primary); text-overflow: ellipsis; white-space: nowrap; }
   .status-text {
     box-sizing: content-box;
     height: 18px;

@@ -7,7 +7,8 @@ export const createRendererCall = <T>(
   namespace: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   exposeObj: Record<string, (...args: any[]) => Promise<unknown>>,
-  sendEvent: (channelName: string, data: unknown) => void
+  sendEvent: (channelName: string, data: unknown) => void,
+  isTrustedSender: (event: Electron.IpcMainEvent) => boolean
 ) => {
   let evt: null | Electron.IpcMainEvent = null
   const channelName = createName(namespace)
@@ -23,6 +24,7 @@ export const createRendererCall = <T>(
     timeout: 0,
   })
   ipcMain.on(channelName, (event, data) => {
+    if (!isTrustedSender(event)) return
     evt = event
     message2call.message(data)
   })

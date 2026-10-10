@@ -95,7 +95,7 @@ const setCachedListInfo = (
         listInfo.page = 0
         listInfo.total = 0
       }
-      console.log(error)
+      console.warn('Resource request failed')
       throw error
     })
 }
@@ -142,7 +142,7 @@ export const detail = (
     limit,
     page,
   }).then((result) => {
-    console.log(result)
+
     return result
   })
   setCachedListInfo(extensionId, source, page, limit, id, promise)
@@ -167,7 +167,7 @@ export const songlistDetailAll = async (
       limit,
       page,
     }).then((result) => {
-      console.log(result)
+
       return result
     })
   }
@@ -203,7 +203,7 @@ export const songlistDetailAllWithInfo = async (
       limit,
       page,
     }).then((result) => {
-      console.log(result)
+
       return result
     })
   }

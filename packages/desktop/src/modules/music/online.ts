@@ -12,6 +12,7 @@ import { buildMusicCacheId, getFileType } from '@any-listen/common/tools'
 
 import { appState } from '@/app'
 import { workers } from '@/worker'
+import { registerRemoteAudioUrl } from '../proxyServer'
 
 import { buildLyricInfo, getCachedLyricInfo, saveLyricInfo } from './shared'
 
@@ -34,7 +35,7 @@ export const getMusicUrlByExtSource = async ({
   if (cachedUrl && !isRefresh) {
     try {
       await assertPlayableMusicUrl(cachedUrl, musicInfo, true)
-      return { isFromCache: true, quality: targetQuality, url: cachedUrl }
+      return { isFromCache: true, quality: targetQuality, url: registerRemoteAudioUrl(cachedUrl) }
     } catch (err) {
       console.error(err)
       await workers.dbService.musicUrlRemove([id])
@@ -49,7 +50,7 @@ export const getMusicUrlByExtSource = async ({
   })
   return {
     quality: info.quality,
-    url: info.url,
+    url: registerRemoteAudioUrl(info.url),
     isFromCache: false,
   }
 }
@@ -69,7 +70,7 @@ export const getMusicUrl = async ({
   if (cachedUrl && !isRefresh) {
     try {
       await assertPlayableMusicUrl(cachedUrl, musicInfo, true)
-      return { isFromCache: true, quality: targetQuality, url: cachedUrl }
+      return { isFromCache: true, quality: targetQuality, url: registerRemoteAudioUrl(cachedUrl) }
     } catch (err) {
       console.error(err)
       await workers.dbService.musicUrlRemove([id])
@@ -121,7 +122,7 @@ export const getMusicUrl = async ({
 
   return {
     quality: info.quality,
-    url: info.url,
+    url: registerRemoteAudioUrl(info.url),
     isFromCache: false,
     otherSource,
   }

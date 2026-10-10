@@ -2,7 +2,7 @@ import path from 'node:path'
 
 import { DEV_SERVER_PORTS } from '@any-listen/common/constants'
 import { getPlatform, isLinux, isWin } from '@any-listen/nodejs/index'
-import { BrowserWindow, Notification, dialog, session } from 'electron'
+import { BrowserWindow, Notification, dialog, ipcMain, session } from 'electron'
 
 import { appState } from '@/app'
 import { collectMusic, uncollectMusic } from '@/modules/player'
@@ -16,6 +16,28 @@ import { winMainState } from './state'
 import { createTaskBarButtons, getWindowSizeInfo } from './utils'
 
 let browserWindow: Electron.BrowserWindow | null = null
+const backgroundTimers = new Map<number, ReturnType<typeof setTimeout>>()
+const isMainFrameSender = (event: Electron.IpcMainEvent) => {
+  const contents = browserWindow?.webContents
+  return !!contents && event.sender === contents && event.senderFrame === contents.mainFrame
+}
+ipcMain.on('anylisten-background-timer-set', (event, id: number, delay: number) => {
+  if (!isMainFrameSender(event) || !Number.isSafeInteger(id) || id < 1 || typeof delay !== 'number' || !Number.isFinite(delay)) return
+  if (!backgroundTimers.has(id) && backgroundTimers.size >= 2048) return
+  const prior = backgroundTimers.get(id)
+  if (prior) clearTimeout(prior)
+  const sender = event.sender
+  backgroundTimers.set(id, setTimeout(() => {
+    backgroundTimers.delete(id)
+    if (!sender.isDestroyed() && browserWindow?.webContents === sender) sender.send('anylisten-background-timer-fired', id)
+  }, Math.min(Math.max(delay, 0), 24 * 60 * 60 * 1000)))
+})
+ipcMain.on('anylisten-background-timer-clear', (event, id: number) => {
+  if (!isMainFrameSender(event) || !Number.isSafeInteger(id)) return
+  const timer = backgroundTimers.get(id)
+  if (timer) clearTimeout(timer)
+  backgroundTimers.delete(id)
+})
 
 const winEvent = () => {
   if (!browserWindow) return
@@ -32,7 +54,14 @@ const winEvent = () => {
   })
 
   browserWindow.on('closed', () => {
+    for (const timer of backgroundTimers.values()) clearTimeout(timer)
+    backgroundTimers.clear()
     browserWindow = null
+  })
+  browserWindow.webContents.on('did-start-navigation', (_event, navigationInfo) => {
+    if (!navigationInfo.isMainFrame) return
+    for (const timer of backgroundTimers.values()) clearTimeout(timer)
+    backgroundTimers.clear()
   })
 
   // browserWindow.on('restore', () => {
@@ -106,11 +135,11 @@ export const createWindow = () => {
     webPreferences: {
       preload: preloadUrl,
       session: ses,
-      nodeIntegrationInWorker: true,
-      contextIsolation: false,
-      webSecurity: false,
+      nodeIntegrationInWorker: false,
+      contextIsolation: true,
+      webSecurity: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
       enableWebSQL: false,
       webgl: false,
       spellcheck: false, // 禁用拼写检查器

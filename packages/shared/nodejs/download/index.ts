@@ -23,6 +23,7 @@ export interface Options {
   method?: DownloaderOptions['requestOptions']['method']
   headers?: DownloaderOptions['requestOptions']['headers']
   forceResume?: boolean
+  verifyAudio?: boolean
   proxy?: { host: string; port: number }
   onCompleted?: () => void
   onError?: (error: Error) => void
@@ -37,6 +38,7 @@ export const createDownload = ({
   path,
   method = 'get',
   forceResume,
+  verifyAudio = false,
   proxy,
   headers = {},
   // resumeTime = 5000,
@@ -60,13 +62,13 @@ export const createDownload = ({
     },
 
     forceResume,
+    verifyAudio,
   })
 
   dl.on('completed', () => {
     onCompleted()
   })
     .on('error', (err: Error) => {
-      if (err.message === 'socket hang up') return
       onError(err)
     })
     .on('start', () => {

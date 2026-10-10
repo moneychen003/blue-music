@@ -3,6 +3,29 @@ import { SINGERS_RXP } from '@any-listen/common/constants'
 
 import { services } from '../resources/shared'
 
+import { runSourceAction } from './sourceHealth'
+import { buildExtSourceId } from './utils'
+
+const activeSearchControllers = new Map<string, AbortController>()
+const cancelledSearchIds = new Set<string>()
+const MAX_CANCELLED_IDS = 1024
+const isRequestId = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+
+/** Cancels one user search, never the extension worker or unrelated requests. */
+export const cancelMusicSearch = (requestId: string) => {
+  if (!isRequestId(requestId)) return
+  const controller = activeSearchControllers.get(requestId)
+  if (controller) {
+    activeSearchControllers.delete(requestId)
+    controller.abort()
+    return
+  }
+  // A cancel IPC can overtake its matching search IPC. Remember it briefly, with a hard cap.
+  if (cancelledSearchIds.size >= MAX_CANCELLED_IDS) cancelledSearchIds.delete(cancelledSearchIds.values().next().value!)
+  cancelledSearchIds.add(requestId)
+  setTimeout(() => cancelledSearchIds.delete(requestId), 30_000).unref()
+}
+
 export const musicSearch = async ({
   extensionId,
   source,
@@ -10,6 +33,7 @@ export const musicSearch = async ({
   artist,
   page,
   limit,
+  requestId,
 }: {
   extensionId: string
   source: string
@@ -17,6 +41,7 @@ export const musicSearch = async ({
   artist?: string
   page: number
   limit?: number
+  requestId?: string
 }): Promise<AnyListen.IPCResource.MusicListResult> => {
   // console.log(extensionId, source, artist, page, limit)
   if (!name.trim().length) {
@@ -27,24 +52,24 @@ export const musicSearch = async ({
       page: page ?? 1,
     }
   }
-  return services.extensionSerive
-    .resourceAction('musicSearch', {
-      extensionId,
-      source,
-      name,
-      artist,
-      limit,
-      page,
-    })
-    .then((result) => {
-      // console.log(result)
-      return {
-        list: result.list ?? [],
-        total: result.total,
-        limit: result.limit ?? 30,
-        page: result.page ?? 1,
-      }
-    })
+  if (requestId && !isRequestId(requestId)) throw new Error('Invalid search request ID')
+  if (requestId && cancelledSearchIds.delete(requestId)) throw Object.assign(new Error('Search cancelled'), { name: 'AbortError' })
+  const controller = requestId ? new AbortController() : undefined
+  if (requestId && controller) {
+    activeSearchControllers.get(requestId)?.abort()
+    activeSearchControllers.set(requestId, controller)
+  }
+  try {
+    const result = await runSourceAction('musicSearch', buildExtSourceId(extensionId, source), 5000,
+      (_signal, workerRequestId) => services.extensionSerive.resourceAction('musicSearch', {
+        extensionId, source, name, artist, limit, page,
+      }, workerRequestId),
+      { signal: controller?.signal, cancel: (workerRequestId) => services.extensionSerive.cancelResourceAction(workerRequestId) }
+    )
+    return { list: result.list ?? [], total: result.total, limit: result.limit ?? 30, page: result.page ?? 1 }
+  } finally {
+    if (requestId && activeSearchControllers.get(requestId) === controller) activeSearchControllers.delete(requestId)
+  }
 }
 
 type FindMusicType = Omit<AnyListen.Music.MusicInfoOnline, 'name'> & {

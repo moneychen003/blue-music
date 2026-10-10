@@ -9,7 +9,8 @@ export const musicSearch = async (
   name: string,
   artist: string,
   page: number,
-  limit?: number
+  limit?: number,
+  requestId?: string
 ): Promise<{
   list: AnyListen.Music.MusicInfoOnline[]
   total: number
@@ -33,7 +34,7 @@ export const musicSearch = async (
       artist,
       limit,
       page,
-    })
+    }, requestId)
     .then((result) => {
       // console.log(result)
       return {
@@ -59,6 +60,7 @@ export const findMusic = async ({
   albumName,
   interval,
   source: s,
+  requestId,
 }: {
   extensionId: string
   source: string
@@ -66,10 +68,11 @@ export const findMusic = async ({
   singer: string
   albumName: string
   interval: string | null
+  requestId?: string
 }): Promise<AnyListen.Music.MusicInfoOnline | null> => {
   // TODO: auto reversal of singer and name
   // Let the fallback controller distinguish a failed source from no match.
-  const list = await musicSearch(extensionId, s, name, singer, 1, 20)
+  const list = await musicSearch(extensionId, s, name, singer, 1, 20, requestId)
 
   const sortSingle = (singer: string) =>
     SINGERS_RXP.test(singer)
@@ -170,3 +173,5 @@ export const findMusic = async ({
   // console.log(newResult)
   return (newResult as unknown as AnyListen.Music.MusicInfoOnline[])[0] ?? null
 }
+
+export const cancelMusicSearchRequest = (requestId: string) => services.extensionSerive.cancelResourceAction(requestId)

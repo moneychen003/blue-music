@@ -60,7 +60,7 @@
   .menu-item {
     position: relative;
   }
-  .link {
+  .menu-link {
     display: flex;
     padding: 10px 15px;
     color: var(--color-primary-font);

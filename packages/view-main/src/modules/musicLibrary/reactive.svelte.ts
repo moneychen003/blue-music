@@ -122,12 +122,14 @@ export const useUserList = (parentId: AnyListen.List.ParentId) => {
   }
 }
 
-export const useFetchingListStatus = (id = '') => {
-  let val = $state(musicLibraryState.fetchingListStatus[id])
+export const useFetchingListStatus = (id: string | (() => string) = '') => {
+  const getId = () => (typeof id === 'function' ? id() : id)
+  let val = $state(musicLibraryState.fetchingListStatus[getId()])
   $effect(() => {
-    val = musicLibraryState.fetchingListStatus[id]
+    const currentId = getId()
+    val = musicLibraryState.fetchingListStatus[currentId]
     return musicLibraryEvent.on('fetchingListStatusUpdated', (_id) => {
-      if (id != _id) return
+      if (currentId != _id) return
       val = musicLibraryState.fetchingListStatus[_id]
     })
   })
@@ -138,28 +140,39 @@ export const useFetchingListStatus = (id = '') => {
   }
 }
 
-export const useListCover = (listInfo?: AnyListen.List.MyListInfo) => {
-  let val = $state(listInfo ? listInfo.meta.pic || musicLibraryState.listCoverMap.get(listInfo.id) : null)
+export const useListCover = (listInfo?: AnyListen.List.MyListInfo | (() => AnyListen.List.MyListInfo | undefined)) => {
+  const getListInfo = () => (typeof listInfo === 'function' ? listInfo() : listInfo)
+  const initialInfo = getListInfo()
+  let val = $state(initialInfo ? initialInfo.meta.pic || musicLibraryState.listCoverMap.get(initialInfo.id) : null)
   $effect(() => {
-    if (!listInfo || listInfo.type === 'default') return
-    if (listInfo.meta.pic) {
-      val = listInfo.meta.pic
+    const currentInfo = getListInfo()
+    if (!currentInfo) {
+      val = null
       return
     }
-    const pic = musicLibraryState.listCoverMap.get(listInfo.id)
+    if (currentInfo.type === 'default') {
+      val = currentInfo.meta.pic || musicLibraryState.listCoverMap.get(currentInfo.id) || null
+      return
+    }
+    if (currentInfo.meta.pic) {
+      val = currentInfo.meta.pic
+      return
+    }
+    const pic = musicLibraryState.listCoverMap.get(currentInfo.id)
     if (pic) {
       val = pic
     } else {
-      void initListCover(listInfo.id)
+      val = null
+      void initListCover(currentInfo.id)
     }
 
     const unsub = musicLibraryEvent.on('listCoverUpdated', (_listId, cover) => {
-      if (listInfo.id != _listId) return
+      if (currentInfo.id != _listId) return
       val = cover
     })
     const unsub2 = musicLibraryEvent.on('anyListMusicChanged', (ids) => {
-      if (!ids.includes(listInfo.id)) return
-      void initListCover(listInfo.id)
+      if (!ids.includes(currentInfo.id)) return
+      void initListCover(currentInfo.id)
     })
     return () => {
       unsub()

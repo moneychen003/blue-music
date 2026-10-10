@@ -64,7 +64,7 @@
       params[urlParamKeyMap.queryType] = item.queryType
     } else if (item.type == 'search') {
       params[urlParamKeyMap.queryType] = 'music'
-    } else if (item.type != 'search') {
+    } else {
       delete params[urlParamKeyMap.queryType]
       delete params[urlParamKeyMap.source]
     }

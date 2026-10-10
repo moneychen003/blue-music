@@ -6,8 +6,3 @@
 </script>
 
 <GroupedMusicSearch {sourceList} mode="album" />
-
-<style lang="less">
-  .container {
-  }
-</style>

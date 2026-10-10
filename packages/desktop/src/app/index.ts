@@ -5,14 +5,13 @@ import { initCommon } from '@any-listen/app/common'
 // import { navigationUrlWhiteList } from '@common/config'
 import { initDeviceId } from '@any-listen/app/common/deviceId'
 import { DEFAULT_LANG, URL_SCHEME_RXP } from '@any-listen/common/constants'
-import { isUrl } from '@any-listen/common/utils'
 import { parseEnvParams } from '@any-listen/nodejs/env'
 import { checkAndCreateDir, isMac } from '@any-listen/nodejs/index'
 import { app, nativeTheme, screen, shell, webContents } from 'electron'
 
 import { i18n } from '@/i18n'
 import { rendererIPC } from '@/renderer/winMain/rendererEvent'
-import { buildElectronProxyConfig, resolveSystemProxy, trashItem } from '@/shared/electron'
+import { buildElectronProxyConfig, isSafeExternalUrl, resolveSystemProxy, trashItem } from '@/shared/electron'
 import { log, logger } from '@/shared/log'
 import { setProxyByHost } from '@/shared/request'
 import { startCheckUpdateTimeout, update } from '@/shared/update'
@@ -109,13 +108,16 @@ export const setUserDataPath = async () => {
 }
 
 export const registerDeeplink = () => {
-  if (import.meta.env.DEV && process.platform === 'win32') {
-    // Set the path of electron.exe and your app.
-    // These two additional parameters are only available on windows.
-    // console.log(process.execPath, process.argv)
-    app.setAsDefaultProtocolClient('anylisten', process.execPath, process.argv.slice(1))
-  } else {
-    app.setAsDefaultProtocolClient('anylisten')
+  // A side-by-side preview must never replace the installed app's protocol owner.
+  if (!app.getName().endsWith('-preview')) {
+    if (import.meta.env.DEV && process.platform === 'win32') {
+      // Set the path of electron.exe and your app.
+      // These two additional parameters are only available on windows.
+      // console.log(process.execPath, process.argv)
+      app.setAsDefaultProtocolClient('anylisten', process.execPath, process.argv.slice(1))
+    } else {
+      app.setAsDefaultProtocolClient('anylisten')
+    }
   }
 
   // deep link
@@ -131,21 +133,24 @@ export const listenerElectronEvent = () => {
   app.on('session-created', (session) => {
     const proxy = buildElectronProxyConfig(appState.proxy.host, appState.proxy.port, appState.proxy.mode == 'system')
     void session.setProxy(proxy)
+    // Files and remote media are loaded through normal browser/backend paths;
+    // they do not require Chromium permission grants to untrusted origins.
+    // Electron's callback takes an allow/deny boolean, not a Node error.
+    // eslint-disable-next-line n/no-callback-literal
+    session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))
+    session.setPermissionCheckHandler(() => false)
   })
   app.on('web-contents-created', (event, contents) => {
     contents.on('will-navigate', (event, navigationUrl) => {
-      if (import.meta.env.DEV) {
-        console.log('navigation to url:', navigationUrl.length > 130 ? `${navigationUrl.substring(0, 130)}...` : navigationUrl)
-        return
-      }
-      // if (!navigationUrlWhiteList.some(url => url.test(navigationUrl))) {
+      try {
+        const current = new URL(contents.getURL())
+        const next = new URL(navigationUrl)
+        if (current.protocol === 'file:' ? next.protocol === 'file:' && next.pathname === current.pathname : next.origin === current.origin) return
+      } catch {}
       event.preventDefault()
-      //   return
-      // }
-      console.log('navigation to url:', navigationUrl)
     })
     contents.setWindowOpenHandler(({ url }) => {
-      if (!url.startsWith('devtools') && isUrl(url)) {
+      if (isSafeExternalUrl(url)) {
         void shell.openExternal(url)
       }
       console.log(url)

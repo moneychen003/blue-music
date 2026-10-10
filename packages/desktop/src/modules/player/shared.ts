@@ -1,15 +1,14 @@
 import { sendMusicListAction } from '@any-listen/app/modules/musicList'
 import { getPlayInfo as getPlayInfoRaw } from '@any-listen/app/modules/player'
+import { matchingFavoriteIds } from '@any-listen/common/musicIdentity'
 import { LIST_IDS } from '@any-listen/common/constants'
 
 import { appState } from '@/app'
 import { workers } from '@/worker'
 
 export const checkCollect = async (minfo: AnyListen.Player.PlayMusicInfo) => {
-  if (minfo.listId == LIST_IDS.LOVE) return true
-  // 先按精确 id;再按 歌名+歌手 回退,让同一首歌换源/换入口播放也能认出已收藏
-  if (workers.dbService.checkListExistMusic(LIST_IDS.LOVE, minfo.musicInfo.id)) return true
-  return workers.dbService.checkListExistMusicByName(LIST_IDS.LOVE, minfo.musicInfo.name, minfo.musicInfo.singer)
+  const list = await workers.dbService.getListMusics(LIST_IDS.LOVE)
+  return matchingFavoriteIds(list, minfo.musicInfo).length > 0
 }
 
 // export const updatePlayCount = (name?: string, singer?: string, count?: number) => {
@@ -65,7 +64,7 @@ export const uncollectMusic = async () => {
     action: 'list_music_remove',
     data: {
       listId: LIST_IDS.LOVE,
-      ids: [music.musicInfo.id],
+      ids: matchingFavoriteIds(await workers.dbService.getListMusics(LIST_IDS.LOVE), music.musicInfo),
     },
   })
 }

@@ -1,12 +1,55 @@
+import fs from 'node:fs/promises'
+import path from 'node:path'
+
 import { getLocalFilePath } from '@any-listen/app/modules/music/utils'
 import { writeProxyCache } from '@any-listen/app/modules/proxyServer'
 import { verifyResourceBoolean } from '@any-listen/nodejs/request'
 
 import { appState } from '@/app'
-import { encodePath } from '@/shared/electron'
 import { workers } from '@/worker'
+import { registerLocalAudioFile } from '../proxyServer'
 
 import { buildLyricInfo, getCachedLyricInfo } from './shared'
+
+const canonicalFilePath = async (filePath: unknown) => {
+  if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) return null
+  try {
+    return await fs.realpath(filePath)
+  } catch {
+    return null
+  }
+}
+
+// A renderer-provided MusicInfo is only a lookup key. The path must match a
+// current, main-process library or play-queue record after symlink resolution.
+const getAuthorizedLocalPath = async (musicInfo: AnyListen.Music.MusicInfoLocal) => {
+  const incoming = musicInfo as unknown as { id?: unknown; meta?: { filePath?: unknown } }
+  if (typeof incoming.id !== 'string' || !incoming.id) return null
+  const requestedPath = await canonicalFilePath(incoming.meta?.filePath)
+  if (!requestedPath) return null
+  const matches = async (record: AnyListen.Music.MusicInfo) =>
+    record.isLocal && record.id === musicInfo.id && (await canonicalFilePath(record.meta.filePath)) === requestedPath
+
+  const playList = await workers.dbService.getPlayList()
+  for (const entry of playList) {
+    if (await matches(entry.musicInfo)) return requestedPath
+  }
+
+  const listIds = await workers.dbService.getMusicExistListIds(musicInfo.id)
+  for (const listId of new Set(listIds)) {
+    let records = await workers.dbService.getListMusicsByIds(listId, [musicInfo.id])
+    // getListMusicsByIds uses the worker's in-memory cache; load only this
+    // indexed list on a cold start, never enumerate every user list or file.
+    if (!records.length) {
+      await workers.dbService.getListMusics(listId)
+      records = await workers.dbService.getListMusicsByIds(listId, [musicInfo.id])
+    }
+    for (const record of records) {
+      if (await matches(record)) return requestedPath
+    }
+  }
+  return null
+}
 
 export const getMusicUrl = async ({
   musicInfo,
@@ -20,8 +63,10 @@ export const getMusicUrl = async ({
   if (!isRefresh) {
     const path = await getLocalFilePath(musicInfo)
     if (path) {
+      const authorizedPath = await getAuthorizedLocalPath(musicInfo)
+      if (!authorizedPath) throw new Error('Local audio path is not authorized')
       return {
-        url: encodePath(path),
+        url: await registerLocalAudioFile(authorizedPath),
         // toggleSource: false,
         // quality: (musicInfo.meta.bitrateLabel as AnyListen.Music.Quality | null) ?? '128k',
         quality: '128k',

@@ -1,4 +1,4 @@
-import { ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 
 import { IPC_NAMES } from '@/shared/ipc/names'
 import { createMainCall } from '@/shared/ipc/renderer'
@@ -15,8 +15,6 @@ import { createClientResource } from './resource'
 import { createClientSoundEffect } from './soundEffect'
 import { createClientTheme, createExposeTheme } from './theme'
 import './env'
-
-process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 
 export type ExposeFunctions = AnyListen.IPC.ClientIPCActions<Electron.IpcRendererEvent>
 export type ExposeServerFunctions = Omit<
@@ -57,14 +55,27 @@ const connectIPCService: AnyListen.IPC.ConnectIPCSrivice = ({ onConnected, clien
   onConnected(ipc as AnyListen.IPC.ServerIPC)
 }
 
-// @ts-expect-error
-// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-window.__anylisten_ipc_init__ = connectIPCService
+contextBridge.exposeInMainWorld('__anylisten_ipc_init__', connectIPCService)
 
 // 桌面歌词:主进程通过 webContents.postMessage 直传歌词窗 MessagePort
+let lyricPorts: unknown[] | null = null
+let lyricPortReady = false
+const pageWindow = globalThis as unknown as { postMessage: (data: object, targetOrigin: string, transfer: unknown[]) => void }
+const deliverLyricPorts = () => {
+  if (!lyricPortReady || !lyricPorts) return
+  const ports = lyricPorts
+  lyricPorts = null
+  // MessagePort cannot be passed through contextBridge's object copier. Transfer it
+  // through the DOM messaging boundary after the main world installs its listener.
+  pageWindow.postMessage({ source: 'anylisten-preload', type: 'desktop-lyric-port' }, '*', ports)
+}
+contextBridge.exposeInMainWorld('__anylisten_desktop_lyric_bridge__', {
+  ready: () => {
+    lyricPortReady = true
+    deliverLyricPorts()
+  },
+})
 ipcRenderer.on('create-desktop-lyric-process', (event) => {
-  // contextIsolation 为 false,preload 与渲染器共享 window
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-  const hook = (window as any).__onDesktopLyricPort
-  if (hook) hook(event.ports)
+  lyricPorts = event.ports as unknown[]
+  deliverLyricPorts()
 })

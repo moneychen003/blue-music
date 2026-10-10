@@ -20,7 +20,9 @@
     "pub:desktop": "pnpm -F @shared/publish pub desktop",
     "pub:web": "pnpm -F @shared/publish pub web-server",
     "fmt": "oxfmt",
-    "build:windows": "node scripts/build-windows.cjs"
+    "build:windows": "node scripts/build-windows.cjs",
+    "check": "pnpm -F view-main check",
+    "test:regressions": "node scripts/test-local-declarations.cjs && node scripts/test-download-regressions.cjs && node scripts/test-favorite-regressions.cjs && node scripts/test-player-races.cjs && node scripts/test-search-regressions.cjs && node scripts/test-resource-cancellation.cjs && node scripts/test-playback-reliability.cjs && node scripts/test-security-regressions.cjs --audio"
   },
   "devDependencies": {
     "@any-listen/eslint": "workspace:@shared/eslint@^",

@@ -19,7 +19,6 @@ export const connectIPC = (
   if (!connectIPCService) {
     if (!window.__anylisten_ipc_init__) throw new Error('ipc is not available')
     connectIPCService = window.__anylisten_ipc_init__
-    delete window.__anylisten_ipc_init__
   }
   const exposeFuncs: AnyListen.IPC.ClientIPC = {
     ...app,

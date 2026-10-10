@@ -1,4 +1,5 @@
 // import { type I18n } from '@/plugins/i18n'
+declare module 'virtual:svg-icons-register'
 // interface AnyListen.EnvParams {
 //   deeplink?: string | null
 //   cmdParams: AnyListen.CmdParams
@@ -35,6 +36,12 @@ declare interface Window {
   testData: any
 
   __anylisten_ipc_init__?: AnyListen.IPC.ConnectIPCSrivice
+  __anylisten_desktop_lyric_bridge__?: { ready: () => void }
+  __lyricWin?: {
+    ready: (onLock: (locked: boolean) => void) => void
+    setIgnoreMouse: (ignore: boolean) => void
+    setLock: (lock: boolean) => void
+  }
   __anylisten_node_env__?: AnyListen.IPC.NodeEnv
 
   setTheme: (colors: Record<string, string>) => void

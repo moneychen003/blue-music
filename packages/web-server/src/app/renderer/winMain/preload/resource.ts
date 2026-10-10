@@ -9,6 +9,9 @@ export const createClientResource = (ipcSocket: IPCSocket) => {
     async hotSearch(info) {
       return ipcSocket.remote.hotSearch(info)
     },
+    async cancelMusicSearch(requestId) {
+      return ipcSocket.remote.cancelMusicSearch(requestId)
+    },
     async musicSearch(info) {
       return ipcSocket.remote.musicSearch(info)
     },

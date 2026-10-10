@@ -1,83 +1,39 @@
 <script lang="ts">
   import { extT } from '@/modules/extension/i18n'
   import type { SourceType } from './shared.svelte'
-
-  let {
-    list,
-    active,
-    onchange,
-  }: {
-    list: SourceType[]
-    active?: string
-    onchange: (source: SourceType) => void
-  } = $props()
+  let { list, active, onchange }: { list: SourceType[]; active?: string; onchange: (source: SourceType) => void } = $props()
+  let featured = $derived(list.slice(0, 3))
+  const select = (id: string) => {
+    const source = list.find((item) => item.sId === id)
+    if (source && source.sId !== active) onchange(source)
+  }
 </script>
 
-<div class="source-list">
-  <div class="list">
-    {#each list as source (source.sId)}
-      <div
-        role="button"
-        tabindex="0"
-        class="list-item"
-        class:active={source.sId == active}
-        aria-label={$extT(source.extensionId, source.name)}
-        onkeydown={(e) => {
-          if (e.key === 'Enter') {
-            onchange(source)
-          }
-        }}
-        onclick={() => {
-          if (source.sId == active) return
-          onchange(source)
-        }}
-      >
-        {$extT(source.extensionId, source.name)}
-      </div>
-    {/each}
-  </div>
+<div class="source-list" aria-label="音源选择">
+  {#each featured as source, index (source.sId)}
+    <button type="button" class:active={source.sId === active} aria-pressed={source.sId === active} onclick={() => select(source.sId)}>
+      {index === 0 ? '推荐 · ' : ''}{$extT(source.extensionId, source.name)}
+    </button>
+  {/each}
+  {#if list.length > 3}
+    <label>
+      <span class="label">全部音源</span>
+      <select aria-label="选择其他音源" value={active ?? ''} onchange={(event) => select(event.currentTarget.value)}>
+        {#each list as source (source.sId)}
+          <option value={source.sId}>{$extT(source.extensionId, source.name)}</option>
+        {/each}
+      </select>
+    </label>
+  {/if}
 </div>
 
 <style lang="less">
-  .source-list {
-    flex: none;
-    width: 100%;
-    min-width: 0;
-    margin-bottom: 8px;
-    overflow: hidden;
-    background-color: transparent;
-
-    .list {
-      display: flex;
-      flex-flow: row wrap;
-      gap: 6px;
-    }
-    .list-item {
-      position: relative;
-      display: flex;
-      flex: none;
-      align-items: center;
-      height: 28px;
-      padding: 0 10px;
-      font-size: 13px;
-      line-height: 28px;
-      color: rgb(49 49 51);
-      background-color: transparent;
-      border-radius: 4px;
-      transition: 0.3s ease;
-      transition-property: color, background-color;
-      .mixin-ellipsis-1();
-
-      &:hover:not(.active) {
-        cursor: pointer;
-        background-color: var(--color-primary-background-hover);
-      }
-      &.active {
-        color: var(--color-primary);
-        font-weight: 600;
-        background-color: color-mix(in srgb, var(--color-primary) 12%, transparent);
-      }
-
-    }
-  }
+  .source-list { display: flex; flex: none; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; margin-bottom: 8px; }
+  button, select { min-height: 32px; padding: 4px 10px; font: inherit; font-size: 13px; color: var(--color-font); background: var(--color-button-background); border: 1px solid transparent; border-radius: 6px; }
+  button { cursor: pointer; }
+  button.active { color: var(--color-primary); background: var(--color-primary-background-selected); }
+  button:hover { background: var(--color-primary-background-hover); }
+  button:focus-visible, select:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+  label { display: flex; gap: 6px; align-items: center; }
+  .label { font-size: 12px; color: var(--color-font-label); }
 </style>

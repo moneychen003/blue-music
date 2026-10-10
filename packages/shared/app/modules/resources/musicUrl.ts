@@ -3,7 +3,7 @@ import type { Readable } from 'node:stream'
 import { request } from '@any-listen/nodejs/request'
 
 import { services } from './shared'
-import { isSourceCoolingDown, runSourceAction } from './sourceHealth'
+import { isSourceCoolingDown, runSourceAction, sourceAbortError } from './sourceHealth'
 import { findMusic } from './tools'
 import { allowedUrl, buildExtSourceId, getExtSource } from './utils'
 
@@ -17,13 +17,14 @@ const getIntervalSeconds = (interval: string | null | undefined) => {
   return parts.reduce((total, part) => total * 60 + part, 0)
 }
 
-const getContentSize = async (url: string) => {
+const getContentSize = async (url: string, signal?: AbortSignal) => {
   const deadline = Date.now() + 5000
   const probe = async (method: 'HEAD' | 'GET', timeout: number) => {
     const controller = new AbortController()
-    const timer = setTimeout(() => {
-      controller.abort()
-    }, timeout)
+    const onAbort = () => controller.abort()
+    signal?.addEventListener('abort', onAbort, { once: true })
+    if (signal?.aborted) controller.abort()
+    const timer = setTimeout(() => { controller.abort() }, timeout)
     try {
       // needBody returns the stream at headers. Never buffer a whole song when
       // a server ignores Range, and release the socket immediately afterwards.
@@ -44,14 +45,17 @@ const getContentSize = async (url: string) => {
       }
     } finally {
       clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
     }
   }
   let resp: Awaited<ReturnType<typeof probe>> | undefined
   try {
     resp = await probe('HEAD', 2000)
   } catch {
+    if (signal?.aborted) throw sourceAbortError()
     // Some CDNs reject HEAD; a bounded Range GET is the compatibility fallback.
   }
+  if (signal?.aborted) throw sourceAbortError()
   if (!resp?.statusCode || resp.statusCode < 200 || resp.statusCode >= 300) {
     const remaining = deadline - Date.now()
     if (remaining <= 0) throw new Error('Music URL validation timed out')
@@ -93,7 +97,7 @@ const isProbeTimeout = (error: unknown) => {
   )
 }
 
-export const assertPlayableMusicUrl = async (url: string, musicInfo: AnyListen.Music.MusicInfo, isFromCache = false) => {
+export const assertPlayableMusicUrl = async (url: string, musicInfo: AnyListen.Music.MusicInfo, isFromCache = false, signal?: AbortSignal) => {
   let parsed: URL
   try {
     parsed = new URL(url)
@@ -110,9 +114,9 @@ export const assertPlayableMusicUrl = async (url: string, musicInfo: AnyListen.M
   if (expires > 0 && expires * 1000 <= Date.now()) throw new Error('Music URL has expired')
   let size: number
   try {
-    size = await getContentSize(url)
+    size = await getContentSize(url, signal)
   } catch (error) {
-    if (isFromCache || !isProbeTimeout(error)) throw error
+    if (signal?.aborted || isFromCache || !isProbeTimeout(error)) throw error
     // No signed URL in logs. The player remains responsible for final decoding,
     // playback and its normal loading timeout; this is not a successful probe.
     console.warn('Fresh music URL probe timed out; validation unknown, trying playback')
@@ -130,14 +134,16 @@ export const getMusicUrlByExtensionSource = async ({
   musicInfo,
   quality,
   type,
+  signal,
 }: {
   extensionId: string
   source: string
   musicInfo: AnyListen.Music.MusicInfoOnline
   quality?: string
   type?: AnyListen.Music.FileType
+  signal?: AbortSignal
 }): Promise<AnyListen.IPCExtension.MusicUrlInfo> => {
-  return runSourceAction('musicUrl', buildExtSourceId(extensionId, source), 8000, async () =>
+  return runSourceAction('musicUrl', buildExtSourceId(extensionId, source), 8000, async (actionSignal, requestId) =>
     services.extensionSerive
       .resourceAction('musicUrl', {
         extensionId,
@@ -145,8 +151,9 @@ export const getMusicUrlByExtensionSource = async ({
         musicInfo,
         quality,
         type,
-      })
+      }, requestId)
       .then(async (result) => {
+        if (actionSignal.aborted) throw sourceAbortError()
         // console.log(result)
         if (!result.url) throw new Error('Get music url failed')
         // 在线音源的播放地址必须是真实的 http(s) 地址。
@@ -155,9 +162,10 @@ export const getMusicUrlByExtensionSource = async ({
         // 这里统一要求 http(s),挡掉占位符,促使上层自动换到真正可用的音源。
         if (!/^https?:\/\//i.test(result.url)) throw new Error('Get music url failed, invalid url')
         if (!allowedUrl(result.url)) throw new Error('Get music url failed, url not allowed')
-        await assertPlayableMusicUrl(result.url, musicInfo)
+        await assertPlayableMusicUrl(result.url, musicInfo, false, actionSignal)
         return result
-      })
+      }),
+    { signal, cancel: (requestId) => services.extensionSerive.cancelResourceAction(requestId) }
   )
 }
 
@@ -166,15 +174,18 @@ const handleGetMusicUrl = async (
     musicInfo,
     quality,
     type,
+    signal,
   }: {
     musicInfo: AnyListen.Music.MusicInfoOnline
     quality?: string
     type?: AnyListen.Music.FileType
+    signal?: AbortSignal
   },
   excludeList: string[] = []
 ): Promise<AnyListen.IPCExtension.MusicUrlInfo> => {
   const excluded = [...excludeList]
   while (true) {
+    if (signal?.aborted) throw sourceAbortError()
     const source = getExtSource('musicUrl', excluded, musicInfo.meta.source)
     if (!source) throw new Error('Get url failed, no source')
     const sourceId = buildExtSourceId(source.extensionId, source.id)
@@ -187,8 +198,10 @@ const handleGetMusicUrl = async (
         musicInfo,
         quality,
         type,
+        signal,
       })
     } catch {
+      if (signal?.aborted) throw sourceAbortError()
       console.warn(`Music URL failed: ${source.id}; trying next source`)
     }
   }
@@ -198,6 +211,7 @@ export const getMusicUrl = async (data: {
   musicInfo: AnyListen.Music.MusicInfo
   quality?: string
   type?: AnyListen.Music.FileType
+  signal?: AbortSignal
 }): Promise<AnyListen.IPCExtension.MusicUrlInfo & { musicInfo: AnyListen.Music.MusicInfoOnline }> => {
   // 记录实际取址成功时使用的歌曲信息(可能因自动换源而 ≠ 原曲),供上层提示/记忆备用源。
   let usedMusicInfo: AnyListen.Music.MusicInfoOnline | null = null
@@ -206,9 +220,10 @@ export const getMusicUrl = async (data: {
       musicInfo,
       quality: data.quality,
       type: data.type,
+      signal: data.signal,
     })
     usedMusicInfo = musicInfo
     return result
-  })
+  }, data.signal)
   return { ...info, musicInfo: usedMusicInfo ?? (data.musicInfo as AnyListen.Music.MusicInfoOnline) }
 }

@@ -128,15 +128,24 @@
     showNotify(i18n.t('download.clear_done'))
   }
 
-  // 静默刷新(不触发 loading 闪烁),用于轮询进度
+  let refreshing = false
+  let mounted = true
+  let refreshFailed = $state(false)
+  // Single-flight polling, with slower background refresh and observable failure.
   const refreshList = async () => {
+    if (refreshing || !mounted) return
+    refreshing = true
     try {
       const next = await getDownloadList()
+      if (!mounted) return
+      refreshFailed = false
       list = [...next]
       const validIds = new Set(list.map((task) => task.id))
       selectedIds = selectedIds.filter((id) => validIds.has(id))
     } catch {
-      /* 轮询失败忽略,下次再试 */
+      if (mounted) refreshFailed = true
+    } finally {
+      refreshing = false
     }
   }
 
@@ -165,12 +174,20 @@
   }
 
   onMount(() => {
+    mounted = true
     void loadList()
     // 有进行中任务时每秒轮询进度(下载在主进程跑,无推送通道,这里拉取)
+    let lastRefresh = 0
     const timer = setInterval(() => {
-      if (list.some((t) => t.status == 'run' || t.status == 'waiting')) void refreshList()
+      const now = Date.now()
+      const delay = document.hidden ? 10000 : 1000
+      if (now - lastRefresh >= delay && list.some((t) => t.status == 'run' || t.status == 'waiting')) {
+        lastRefresh = now
+        void refreshList()
+      }
     }, 1000)
     return () => {
+      mounted = false
       clearInterval(timer)
     }
   })
@@ -222,6 +239,7 @@
     </div>
   {/if}
 
+  {#if refreshFailed}<p role="status">进度暂时无法刷新，正在重试。<button type="button" onclick={refreshList}>立即重试</button></p>{/if}
   <section class="download-panel">
     {#if list.length}
       <div class="list-head">

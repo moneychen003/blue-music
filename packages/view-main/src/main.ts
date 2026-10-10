@@ -23,11 +23,16 @@ if (isLyricWindow) {
     import('./worker'),
     import('./shared/ipc/app/event'),
   ]).then(([{ default: App }, { initNotify }, { initTooltips }, { connectIPC, registerModules }, { initWorkers }, { createDesktopLyricProcessEvent }]) => {
-    // desktop 主进程通过 webContents.postMessage 把歌词窗 MessagePort 直传过来
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ;(window as any).__onDesktopLyricPort = (ports: MessagePort[]) => {
-      createDesktopLyricProcessEvent.emit(ports)
-    }
+    // Preload uses DOM postMessage only to transfer the native MessagePort;
+    // renderer callbacks stay in the main world under contextIsolation.
+    window.addEventListener('message', (event) => {
+      const data: unknown = event.data
+      if (!data || typeof data !== 'object' || !('source' in data) || !('type' in data)) return
+      if (event.source !== window || data.source !== 'anylisten-preload' || data.type !== 'desktop-lyric-port') return
+      if (event.ports.length !== 1) return
+      createDesktopLyricProcessEvent.emit([event.ports[0]])
+    })
+    window.__anylisten_desktop_lyric_bridge__?.ready()
 
     void initWorkers()
 

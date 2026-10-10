@@ -1,5 +1,6 @@
 // https://github.com/indutny/fft.js
 
+/** @param {number} size */
 function FFT(size) {
   this.size = size | 0
   if (this.size <= 1 || (this.size & (this.size - 1)) !== 0) {
@@ -43,6 +44,7 @@ function FFT(size) {
   this._inv = 0
 }
 
+/** @param {ArrayLike<number>} complex @param {Float32Array | number[]} [storage] */
 FFT.prototype.fromComplexArray = function fromComplexArray(complex, storage) {
   let res = storage || new Array(complex.length >>> 1)
   for (let i = 0; i < complex.length; i += 2) {
@@ -59,6 +61,7 @@ FFT.prototype.createComplexArray = function createComplexArray() {
   return res
 }
 
+/** @param {ArrayLike<number>} input @param {number[]} [storage] */
 FFT.prototype.toComplexArray = function toComplexArray(input, storage) {
   let res = storage || this.createComplexArray()
   for (let i = 0; i < res.length; i += 2) {
@@ -68,6 +71,7 @@ FFT.prototype.toComplexArray = function toComplexArray(input, storage) {
   return res
 }
 
+/** @param {number[] | Float32Array} spectrum */
 FFT.prototype.completeSpectrum = function completeSpectrum(spectrum) {
   let size = this._csize
   let half = size >>> 1
@@ -77,6 +81,7 @@ FFT.prototype.completeSpectrum = function completeSpectrum(spectrum) {
   }
 }
 
+/** @param {number[] | Float32Array} out @param {ArrayLike<number>} data */
 FFT.prototype.transform = function transform(out, data) {
   if (out === data) {
     throw new Error('Input and output buffers must be different')
@@ -90,6 +95,7 @@ FFT.prototype.transform = function transform(out, data) {
   this._data = null
 }
 
+/** @param {number[] | Float32Array} out @param {ArrayLike<number>} data */
 FFT.prototype.realTransform = function realTransform(out, data) {
   if (out === data) {
     throw new Error('Input and output buffers must be different')
@@ -103,6 +109,7 @@ FFT.prototype.realTransform = function realTransform(out, data) {
   this._data = null
 }
 
+/** @param {number[] | Float32Array} out @param {ArrayLike<number>} data */
 FFT.prototype.inverseTransform = function inverseTransform(out, data) {
   if (out === data) {
     throw new Error('Input and output buffers must be different')
@@ -125,6 +132,7 @@ FFT.prototype.inverseTransform = function inverseTransform(out, data) {
 // support both `let compound assignments` and `const phi`
 FFT.prototype._transform4 = function _transform4() {
   let out = this._out
+  if (!out) throw new Error("FFT output buffer is not initialized")
   let size = this._csize
 
   // Initial step (permute and transform)
@@ -233,9 +241,11 @@ FFT.prototype._transform4 = function _transform4() {
 // radix-2 implementation
 //
 // NOTE: Only called for len=4
+/** @param {number} outOff @param {number} off @param {number} step */
 FFT.prototype._singleTransform2 = function _singleTransform2(outOff, off, step) {
   const out = this._out
   const data = this._data
+  if (!out || !data) throw new Error("FFT buffers are not initialized")
 
   const evenR = data[off]
   const evenI = data[off + 1]
@@ -256,9 +266,11 @@ FFT.prototype._singleTransform2 = function _singleTransform2(outOff, off, step) 
 // radix-4
 //
 // NOTE: Only called for len=8
+/** @param {number} outOff @param {number} off @param {number} step */
 FFT.prototype._singleTransform4 = function _singleTransform4(outOff, off, step) {
   const out = this._out
   const data = this._data
+  if (!out || !data) throw new Error("FFT buffers are not initialized")
   const inv = this._inv ? -1 : 1
   const step2 = step * 2
   const step3 = step * 3
@@ -309,6 +321,7 @@ FFT.prototype._singleTransform4 = function _singleTransform4(outOff, off, step) 
 // Real input radix-4 implementation
 FFT.prototype._realTransform4 = function _realTransform4() {
   let out = this._out
+  if (!out) throw new Error("FFT output buffer is not initialized")
   let size = this._csize
 
   // Initial step (permute and transform)
@@ -449,9 +462,11 @@ FFT.prototype._realTransform4 = function _realTransform4() {
 // radix-2 implementation
 //
 // NOTE: Only called for len=4
+/** @param {number} outOff @param {number} off @param {number} step */
 FFT.prototype._singleRealTransform2 = function _singleRealTransform2(outOff, off, step) {
   const out = this._out
   const data = this._data
+  if (!out || !data) throw new Error("FFT buffers are not initialized")
 
   const evenR = data[off]
   const oddR = data[off + step]
@@ -468,9 +483,11 @@ FFT.prototype._singleRealTransform2 = function _singleRealTransform2(outOff, off
 // radix-4
 //
 // NOTE: Only called for len=8
+/** @param {number} outOff @param {number} off @param {number} step */
 FFT.prototype._singleRealTransform4 = function _singleRealTransform4(outOff, off, step) {
   const out = this._out
   const data = this._data
+  if (!out || !data) throw new Error("FFT buffers are not initialized")
   const inv = this._inv ? -1 : 1
   const step2 = step * 2
   const step3 = step * 3

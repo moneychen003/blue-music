@@ -114,7 +114,7 @@
 
 <div class="view-container container">
   {#if listInfo}
-    <MusicList bind:this={musicList} listinfo={listInfo} {list} onscroll={handleScroll} local />
+    <MusicList bind:this={musicList} listinfo={listInfo} {list} onscroll={handleScroll} />
   {/if}
 </div>
 

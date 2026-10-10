@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events'
 import fs from 'node:fs'
 import type http from 'node:http'
 import path from 'node:path'
-import { performance } from 'node:perf_hooks'
+import { pipeline } from 'node:stream/promises'
 
 import { type Options as RequestOptions, request } from './request'
 import { STATUS } from './util'
@@ -11,418 +11,208 @@ export interface Options {
   forceResume: boolean
   timeout: number
   requestOptions: RequestOptions
+  verifyAudio: boolean
 }
 
-const defaultChunkInfo = {
-  path: '',
-  startByte: '0',
-  endByte: '',
-}
-
-const defaultRequestOptions: Options['requestOptions'] = {
-  method: 'get',
-  headers: {},
-}
-const defaultOptions: Options = {
-  forceResume: true,
-  timeout: 20_000,
-  requestOptions: { ...defaultRequestOptions },
-}
-
+/** The final path is never opened for writing. Only a verified .part is renamed into place. */
 class Task extends EventEmitter {
-  resumeLastChunk: Buffer | null
   downloadUrl: string
   chunkInfo: { savePath: string; startByte: string; endByte: string }
-  status: (typeof STATUS)[keyof typeof STATUS]
+  status: (typeof STATUS)[keyof typeof STATUS] = STATUS.idle
   options: Options
-  requestOptions: Options['requestOptions']
-  ws: fs.WriteStream | null = null
-  progress = { total: 0, downloaded: 0, speed: 0, progress: 0 }
-  statsEstimate = { time: 0, bytes: 0, prevBytes: 0 }
+  requestOptions: RequestOptions
   requestInstance: http.ClientRequest | null = null
-  maxRedirectNum = 2
-  private redirectNum = 0
-  private dataWriteQueueLength = 0
-  private closeWaiting = false
-  private timeout: null | NodeJS.Timeout = null
+  private ws: fs.WriteStream | null = null
+  private stopped = false
+  private finished: Promise<void> | null = null
+  private downloaded = 0
+  private total = 0
+  private lastProgressAt = 0
+  private lastProgressBytes = 0
 
   constructor(url: string, savePath: string, options: Partial<Options> = {}) {
     super()
-
-    this.resumeLastChunk = null
     this.downloadUrl = url
-    this.chunkInfo = {
-      ...defaultChunkInfo,
-      savePath,
-      startByte: '0',
+    this.chunkInfo = { savePath, startByte: '0', endByte: '' }
+    this.options = { forceResume: true, timeout: 20_000, requestOptions: { method: 'get' }, verifyAudio: false, ...options }
+    this.requestOptions = {
+      ...this.options.requestOptions,
+      headers: { ...this.options.requestOptions.headers },
     }
-    // if (!this.chunkInfo.endByte) this.chunkInfo.endByte = ''
-
-    this.options = { ...defaultOptions, ...options }
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    this.requestOptions = { ...defaultRequestOptions, ...(this.options.requestOptions || {}) }
-    this.requestOptions.headers = this.requestOptions.headers ? { ...this.requestOptions.headers } : {}
-
-    this.status = STATUS.idle
   }
 
-  async __init() {
-    const { savePath, startByte, endByte } = this.chunkInfo
-    this.redirectNum = 0
-    this.progress.downloaded = 0
-    this.progress.progress = 0
-    this.progress.speed = 0
-    this.dataWriteQueueLength = 0
-    this.closeWaiting = false
-    this.__clearTimeout()
-    this.__startTimeout()
-    if (startByte) this.requestOptions.headers!.range = `bytes=${startByte}-${endByte}`
+  private async response(url: string, offset: number, redirects = 0): Promise<http.IncomingMessage> {
+    if (redirects > 5) throw new Error('Too many download redirects')
+    const headers = { ...this.requestOptions.headers }
+    if (offset) headers.range = `bytes=${offset}-`
+    else delete headers.range
+    const response = await new Promise<http.IncomingMessage>((resolve, reject) => {
+      const req = request(url, { ...this.requestOptions, headers, timeout: this.options.timeout })
+      this.requestInstance = req
+      req.once('response', resolve).once('error', reject).end()
+    })
+    if (this.stopped) {
+      response.destroy()
+      throw new Error('Download stopped')
+    }
+    if ([301, 302, 303, 307, 308].includes(response.statusCode ?? 0) && response.headers.location) {
+      const next = new URL(response.headers.location, url).href
+      response.resume()
+      return this.response(next, offset, redirects + 1)
+    }
+    return response
+  }
 
-    if (!savePath) return
-    return new Promise<void>((resolve, reject) => {
-      fs.stat(savePath, async (errStat, stats) => {
-        if (errStat) {
-          // console.log(errStat.code)
-          if (errStat.code == 'ENOENT') {
-            const dir = path.dirname(savePath)
-            await fs.promises.mkdir(dir, { recursive: true }).catch(() => {})
-          } else {
-            this.__handleError(errStat)
-            reject(errStat)
-            return
-          }
-        } else if (stats.size >= 10) {
-          fs.open(savePath, 'r', (errOpen, fd) => {
-            if (errOpen) {
-              this.__handleError(errOpen)
-              reject(errOpen)
-              return
-            }
-            fs.read(fd, Buffer.alloc(10), 0, 10, stats.size - 10, (errRead, bytesRead, buffer) => {
-              if (errRead) {
-                this.__handleError(errRead)
-                reject(errRead)
-                return
-              }
-              fs.close(fd, (errClose) => {
-                if (errClose) {
-                  this.__handleError(errClose)
-                  reject(errClose)
-                  return
-                }
-
-                // resume download
-                // console.log(buffer)
-                this.resumeLastChunk = buffer
-                this.progress.downloaded = stats.size
-                this.requestOptions.headers!.range = `bytes=${stats.size - 10}-${endByte || ''}`
-                resolve()
-              })
-            })
-          })
-          return
-        }
-        resolve()
-      })
+  private report(force = false) {
+    const now = Date.now()
+    if (!force && now - this.lastProgressAt < 1000) return
+    const elapsed = Math.max(1, now - this.lastProgressAt)
+    const speed = Math.round(((this.downloaded - this.lastProgressBytes) * 1000) / elapsed)
+    this.lastProgressAt = now
+    this.lastProgressBytes = this.downloaded
+    this.emit('progress', {
+      total: this.total,
+      downloaded: this.downloaded,
+      progress: this.total ? (this.downloaded / this.total) * 100 : 0,
+      speed,
+      writeQueue: this.ws?.writableLength ?? 0,
     })
   }
 
-  __httpFetch(url: string, options: Options['requestOptions']) {
-    // console.log(options)
-    let redirected = false
-    this.requestInstance = request(url, options)
-      .on('response', (response) => {
-        if (response.statusCode !== 200 && response.statusCode !== 206) {
-          if (response.statusCode == 416) {
-            fs.unlink(this.chunkInfo.savePath, (err) => {
-              this.__handleError(new Error(response.statusMessage))
-              this.chunkInfo.startByte = '0'
-              this.resumeLastChunk = null
-              this.progress.downloaded = 0
-              if (err) this.__handleError(err)
-            })
-            return
-          }
-          if (
-            (response.statusCode == 301 || response.statusCode == 302) &&
-            response.headers.location &&
-            this.redirectNum < this.maxRedirectNum
-          ) {
-            console.log('current url:', url)
-            console.log('redirect to:', response.headers.location)
-            redirected = true
-            this.redirectNum++
-            const location = response.headers.location
-            this.__httpFetch(location, options)
-            return
-          }
-          this.status = STATUS.failed
-          this.emit('fail', response)
-          this.__clearTimeout()
-          this.__closeRequest()
-          void this.__closeWriteStream()
-          return
-        }
-        this.emit('response', response)
-        try {
-          this.__initDownload(response)
-        } catch (error) {
-          this.__handleError(error as Error)
-          return
-        }
-        this.status = STATUS.running
-        this.__startTimeout()
-        response
-          .on('data', this.__handleWriteData.bind(this))
-          .on('error', (err) => {
-            this.__handleError(err)
-          })
-          .on('end', () => {
-            if (response.complete) {
-              this.__handleComplete()
-            } else {
-              // this.__handleError(new Error('The connection was terminated while the message was still being sent'))
-              void this.stop()
-            }
-          })
-      })
-      .on('error', (err) => {
-        this.__handleError(err)
-      })
-      .on('close', () => {
-        if (redirected) return
-        void this.__closeWriteStream()
-      })
-      .end()
+
+  /** Header-level container check only; this does not decode audio or verify a content hash. */
+  private async verifyAudioContainer(partPath: string, finalPath: string) {
+    const handle = await fs.promises.open(partPath, 'r')
+    const header = Buffer.alloc(32)
+    let bytesRead: number
+    try { ({ bytesRead } = await handle.read(header, 0, header.length, 0)) }
+    finally { await handle.close() }
+    const head = header.subarray(0, bytesRead)
+    let container: 'mp3' | 'flac' | 'wav' | 'm4a' | null = null
+    if (head.length >= 3 && head.toString('ascii', 0, 3) === 'ID3') container = 'mp3'
+    else if (head.length >= 4 && head[0] === 0xff && (head[1] & 0xe0) === 0xe0 &&
+      (head[1] & 0x18) !== 0x08 && (head[1] & 0x06) === 0x02 &&
+      (head[2] & 0xf0) !== 0 && (head[2] & 0xf0) !== 0xf0 && (head[2] & 0x0c) !== 0x0c) container = 'mp3'
+    else if (head.length >= 4 && head.toString('ascii', 0, 4) === 'fLaC') container = 'flac'
+    else if (head.length >= 12 && head.toString('ascii', 0, 4) === 'RIFF' && head.toString('ascii', 8, 12) === 'WAVE') container = 'wav'
+    else if (head.length >= 12 && head.toString('ascii', 4, 8) === 'ftyp') {
+      const brands = [head.toString('ascii', 8, 12)]
+      for (let offset = 16; offset + 4 <= head.length; offset += 4) brands.push(head.toString('ascii', offset, offset + 4))
+      if (brands.some((brand) => ['M4A ', 'M4B ', 'isom', 'iso2', 'iso6', 'mp41', 'mp42', 'dash'].includes(brand))) container = 'm4a'
+    }
+    const ext = path.extname(finalPath).slice(1).toLowerCase()
+    if (!container) throw new Error('Downloaded file is not a recognized audio container')
+    if (container !== ext) throw new Error(`Downloaded audio container ${container} does not match .${ext}`)
   }
 
-  __initDownload(response: http.IncomingMessage) {
-    this.progress.total = response.headers['content-length'] ? parseInt(response.headers['content-length']) : 0
-    if (!this.progress.total) {
-      this.__handleError(new Error('Content length is 0'))
-      return
+  private async transfer(retried416 = false): Promise<void> {
+    const finalPath = this.chunkInfo.savePath
+    if (!finalPath) throw new Error('Chunk save Path is not set.')
+    const partPath = `${finalPath}.part`
+    await fs.promises.mkdir(path.dirname(finalPath), { recursive: true })
+    if (this.stopped) return
+    const offset = (await fs.promises.stat(partPath).catch((err: NodeJS.ErrnoException) => {
+      if (err.code === 'ENOENT') return null
+      throw err
+    }))?.size ?? 0
+    const response = await this.response(this.downloadUrl, offset)
+    response.setTimeout(this.options.timeout, () => response.destroy(new Error('download timeout')))
+    const status = response.statusCode ?? 0
+    if (status === 416 && offset && !retried416) {
+      response.resume()
+      await fs.promises.truncate(partPath, 0)
+      return this.transfer(true)
     }
-    let options: NonNullable<Parameters<(typeof fs)['createWriteStream']>[1]> = {}
-    let isResumable =
-      this.options.forceResume ||
-      response.headers['accept-ranges'] !== 'none' ||
-      (typeof response.headers['accept-ranges'] == 'string' &&
-        parseInt(response.headers['accept-ranges'].replace(/^bytes=(\d+)/, '$1')) > 0)
-
-    if (isResumable) {
-      options.flags = 'a'
-      if (this.progress.downloaded) this.progress.total -= 10
-    } else if (this.chunkInfo.startByte != '0') {
-      this.__handleError(new Error('The resource cannot be resumed download.'))
-      return
+    if (status !== 200 && status !== 206) {
+      response.resume()
+      throw new Error(`Download HTTP ${status}`)
     }
-    this.progress.total += this.progress.downloaded
-    this.statsEstimate.prevBytes = this.progress.downloaded
-    if (!this.chunkInfo.savePath) {
-      this.__handleError(new Error('Chunk save Path is not set.'))
-      return
+    const lengthHeader = response.headers['content-length']
+    const length = typeof lengthHeader === 'string' && /^\d+$/.test(lengthHeader) ? Number(lengthHeader) : NaN
+    if (!Number.isSafeInteger(length) || length <= 0) {
+      response.destroy()
+      throw new Error('Invalid Content-Length')
     }
-    this.ws = fs.createWriteStream(this.chunkInfo.savePath, options)
-
-    this.ws.on('finish', () => {
-      if (this.closeWaiting) return
-      void this.__closeWriteStream()
-    })
-    this.ws.on('error', (err) => {
-      fs.unlink(this.chunkInfo.savePath, (unlinkErr) => {
-        this.__handleError(err)
-        this.chunkInfo.startByte = '0'
-        this.resumeLastChunk = null
-        this.progress.downloaded = 0
-        if (unlinkErr && unlinkErr.code !== 'ENOENT') this.__handleError(unlinkErr)
-      })
-    })
-  }
-
-  __handleComplete() {
-    if (this.status == STATUS.error) return
-    this.__clearTimeout()
-    void this.__closeWriteStream().then(() => {
-      if (this.progress.downloaded == this.progress.total) {
-        this.status = STATUS.completed
-        this.emit('completed')
-      } else {
-        this.status = STATUS.stopped
-        this.emit('stop')
+    let append = false
+    if (status === 206) {
+      const range = response.headers['content-range']
+      const match = typeof range === 'string' ? /^bytes (\d+)-(\d+)\/(\d+)$/.exec(range) : null
+      const start = match ? Number(match[1]) : NaN
+      const end = match ? Number(match[2]) : NaN
+      const total = match ? Number(match[3]) : NaN
+      if (!offset || start !== offset || end < start || end - start + 1 !== length || total <= end || !Number.isSafeInteger(total)) {
+        response.destroy()
+        throw new Error('Invalid Content-Range')
       }
+      this.total = total
+      this.downloaded = offset
+      append = true
+    } else {
+      // A server may ignore Range. Its 200 body is a complete replacement, never an append.
+      this.total = length
+      this.downloaded = 0
+    }
+    this.lastProgressAt = Date.now()
+    this.lastProgressBytes = this.downloaded
+    this.emit('response', response)
+    const ws = fs.createWriteStream(partPath, { flags: append ? 'a' : 'w' })
+    this.ws = ws
+    response.on('data', (chunk: Buffer) => {
+      this.downloaded += chunk.length
+      this.report()
     })
-    // console.log('end')
-  }
-
-  __handleError(error: Error) {
-    if (this.status == STATUS.error) return
-    this.status = STATUS.error
-    this.__clearTimeout()
-    this.__closeRequest()
-    void this.__closeWriteStream()
-    if (error.message == 'aborted') return
-    this.emit('error', error)
-  }
-
-  async __closeWriteStream() {
-    return new Promise<void>((resolve, reject) => {
-      if (!this.ws) {
-        resolve()
-        return
-      }
-      // console.log('close write stream')
-      if (this.closeWaiting || this.dataWriteQueueLength) {
-        this.closeWaiting ||= true
-        this.ws.on('close', resolve)
-      } else {
-        this.ws.close((err) => {
-          if (err) {
-            this.status = STATUS.error
-            this.emit('error', err)
-            reject(err)
-            return
-          }
-          this.ws = null
-          resolve()
-        })
-      }
-    })
-  }
-
-  __closeRequest() {
-    if (!this.requestInstance || this.requestInstance.destroyed) return
-    // console.log('close request')
-    this.requestInstance.destroy()
-    this.requestInstance = null
-  }
-
-  __handleWriteData(chunk: Buffer) {
-    if (this.resumeLastChunk) {
-      const result = this.__handleDiffChunk(chunk)
-      if (result) chunk = result
-      else {
-        void this.__handleStop().finally(() => {
-          // this.__handleError(new Error('Resume failed, response chunk does not match.'))
-          // Resume failed, response chunk does not match, remove file and restart download
-          console.log('Resume failed, response chunk does not match.')
-          fs.unlink(this.chunkInfo.savePath, (unlinkErr) => {
-            // this.__handleError(err)
-            this.chunkInfo.startByte = '0'
-            this.resumeLastChunk = null
-            if (unlinkErr && unlinkErr.code !== 'ENOENT') {
-              this.__handleError(unlinkErr)
-              return
-            }
-            void this.start()
-          })
-        })
-        return
-      }
+    try {
+      await pipeline(response, ws)
+    } finally {
+      this.ws = null
+      this.requestInstance = null
     }
-    // console.log('data', chunk)
-    if (this.status == STATUS.stopped || this.ws == null) {
-      console.log('cancel write')
-      return
-    }
-    this.dataWriteQueueLength++
-    this.__startTimeout()
-    this.__calculateProgress(chunk.length)
-    this.ws.write(chunk, (err) => {
-      this.dataWriteQueueLength--
-      if (this.status == STATUS.running) this.__calculateProgress(0)
-      if (err) {
-        console.log(err)
-        this.__handleError(err)
-        return
-      }
-      if (this.closeWaiting && !this.dataWriteQueueLength) this.ws?.close()
-    })
-  }
-
-  __handleDiffChunk(chunk: Buffer): Buffer | null {
-    // console.log('diff', chunk)
-    let resumeLastChunkLen = this.resumeLastChunk!.length
-    let chunkLen = chunk.length
-    let isOk
-    if (chunkLen >= resumeLastChunkLen) {
-      isOk = chunk.subarray(0, resumeLastChunkLen).toString('hex') === this.resumeLastChunk!.toString('hex')
-      if (!isOk) return null
-
-      this.resumeLastChunk = null
-      return chunk.subarray(resumeLastChunkLen)
-    }
-    isOk = chunk.subarray(0, chunkLen).toString('hex') === this.resumeLastChunk!.subarray(0, chunkLen).toString('hex')
-    if (!isOk) return null
-    this.resumeLastChunk = this.resumeLastChunk!.subarray(chunkLen)
-    return chunk.subarray(chunkLen)
-  }
-
-  async __handleStop() {
-    this.__clearTimeout()
-    this.__closeRequest()
-    return this.__closeWriteStream()
-  }
-
-  private __clearTimeout() {
-    if (!this.timeout) return
-    clearTimeout(this.timeout)
-    this.timeout = null
-  }
-
-  private __startTimeout() {
-    this.__clearTimeout()
-    this.timeout = setTimeout(() => {
-      this.__handleError(new Error('download timeout'))
-    }, this.options.timeout)
-  }
-
-  __calculateProgress(receivedBytes: number) {
-    const currentTime = performance.now()
-    const elaspsedTime = currentTime - this.statsEstimate.time
-
-    const progress = this.progress
-    progress.downloaded += receivedBytes
-    progress.progress = progress.total ? (progress.downloaded / progress.total) * 100 : -1
-
-    // emit the progress every second or if finished
-    if ((progress.downloaded === progress.total && this.dataWriteQueueLength == 0) || elaspsedTime > 1000) {
-      this.statsEstimate.time = currentTime
-      this.statsEstimate.bytes = progress.downloaded - this.statsEstimate.prevBytes
-      this.statsEstimate.prevBytes = progress.downloaded
-      this.emit('progress', {
-        total: progress.total,
-        downloaded: progress.downloaded,
-        progress: progress.progress,
-        speed: this.statsEstimate.bytes,
-        writeQueue: this.dataWriteQueueLength,
-      })
-    }
+    if (this.stopped) return
+    const actual = (await fs.promises.stat(partPath)).size
+    if (actual !== this.total || this.downloaded !== this.total) throw new Error(`Incomplete download: ${actual}/${this.total}`)
+    this.report(true)
+    if (this.stopped) return
+    if (this.options.verifyAudio) await this.verifyAudioContainer(partPath, finalPath)
+    if (this.stopped) return
+    await fs.promises.rename(partPath, finalPath)
+    if (this.stopped) return
+    this.status = STATUS.completed
+    this.emit('completed')
   }
 
   async start() {
+    if (this.finished) return this.finished
+    this.stopped = false
     this.status = STATUS.init
-    await this.__init()
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    if (this.status !== STATUS.init) return
-    this.status = STATUS.running
-    this.__httpFetch(this.downloadUrl, this.requestOptions)
-    this.emit('start')
+    this.finished = (async () => {
+      try {
+        if (this.stopped) return
+        this.status = STATUS.running
+        this.emit('start')
+        await this.transfer()
+      } catch (err) {
+        if (this.stopped) return
+        this.status = STATUS.error
+        this.emit('error', err)
+      } finally {
+        this.finished = null
+      }
+    })()
+    return this.finished
   }
 
   async stop() {
-    if (this.status == STATUS.stopped || this.status == STATUS.completed) return
+    if (this.stopped || this.status === STATUS.completed) return
+    this.stopped = true
     this.status = STATUS.stopped
-    await this.__handleStop()
+    this.requestInstance?.destroy()
+    this.ws?.destroy()
+    await this.finished?.catch(() => {})
     this.emit('stop')
   }
 
-  refreshUrl(url: string) {
-    this.downloadUrl = url
-  }
-
-  updateSaveInfo(filePath: string, fileName: string) {
-    this.chunkInfo.savePath = path.join(filePath, fileName)
-  }
+  refreshUrl(url: string) { this.downloadUrl = url }
+  updateSaveInfo(filePath: string, fileName: string) { this.chunkInfo.savePath = path.join(filePath, fileName) }
 }
 
 export default Task

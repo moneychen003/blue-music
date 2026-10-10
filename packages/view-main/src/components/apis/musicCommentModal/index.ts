@@ -21,7 +21,7 @@ export const showMusicCommentModal = async (
   })
   void tick()
     .then(() => {
-      app.show(musicInfo, onrefresh)
+      app.show(musicInfo, onrefresh ?? (() => null))
     })
     .finally(() => {
       unsub()

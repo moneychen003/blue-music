@@ -1,9 +1,11 @@
 import http from 'node:http'
 
 import { initProxyServer as initProxyServerState, proxyRequest } from '@any-listen/app/modules/proxyServer'
-import { PROXY_SERVER_PATH } from '@any-listen/common/constants'
+import { DEV_SERVER_PORTS, PROXY_SERVER_PATH } from '@any-listen/common/constants'
 
 import { appState } from '@/app'
+import { handleAudioResource, initAudioResources, setRendererCorsHeaders } from './audioResources'
+export { registerLocalAudioFile, registerRemoteAudioUrl } from './audioResources'
 
 let DEFAULT_PORT = 19500
 let retryCount = 0
@@ -16,7 +18,12 @@ const createProxyServer = async () => {
       return
     }
     const path = req.url.split('?')[0]
+    if (path.startsWith('/audio/')) {
+      await handleAudioResource(req, res, path)
+      return
+    }
     if (path.startsWith(PROXY_PATH_PREFIX)) {
+      setRendererCorsHeaders(req, res)
       const name = decodeURIComponent(path.replace(PROXY_PATH_PREFIX, ''))
       const result = await proxyRequest(name, req.headers.range)
       if (result) {
@@ -45,7 +52,7 @@ const createProxyServer = async () => {
     res.writeHead(200, { 'Content-Type': 'text/plain' })
     res.end('AnyListen Proxy Server\n')
   })
-  server.listen(DEFAULT_PORT, 'localhost')
+  server.listen(DEFAULT_PORT, '127.0.0.1')
   return new Promise<string>((resolve, reject) => {
     server.on('listening', () => {
       const address = server.address()
@@ -73,5 +80,6 @@ export const initProxyServer = async () => {
     return createProxyServer()
   })
   console.log('Proxy server running at', proxyHost)
+  initAudioResources(proxyHost, `http://localhost:${DEV_SERVER_PORTS['view-main']}`)
   void initProxyServerState(`${proxyHost}${PROXY_SERVER_PATH}`, appState.cacheDataPath)
 }

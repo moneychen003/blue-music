@@ -16,6 +16,7 @@ import { createExposePlayer } from './player'
 import { createExposeResource } from './resource'
 import { createExposeSoundEffect } from './soundEffect'
 import { createExposeTheme } from './theme'
+import { getWebContents } from '../main'
 
 export type ExposeFunctions = Omit<
   AnyListen.IPC.ServerIPCActions<Electron.IpcRendererEvent>,
@@ -42,7 +43,15 @@ export const init = (sendEvent: (channelName: string, data: unknown) => void) =>
     ...createExposeSoundEffect(),
   }
 
-  const rendererCallUtil = createRendererCall<AnyListen.IPC.ClientIPC>(IPC_NAMES.VIEW_MAIN, exposeObj, sendEvent)
+  const rendererCallUtil = createRendererCall<AnyListen.IPC.ClientIPC>(
+    IPC_NAMES.VIEW_MAIN,
+    exposeObj,
+    sendEvent,
+    (event) => {
+      const contents = getWebContents()
+      return !!contents && event.sender === contents && event.senderFrame === contents.mainFrame
+    }
+  )
 
   ipc = rendererCallUtil.remote
 

@@ -16,8 +16,8 @@
     onremove: () => Promise<void>
   } = $props()
 
-  let nameLabel = buildMusicName(settingState.setting['download.fileName'], info.musicInfo.name, info.musicInfo.singer)
-  let sourceLabel = buildSourceLabel(info.musicInfo)
+  let nameLabel = $derived(buildMusicName(settingState.setting['download.fileName'], info.musicInfo.name, info.musicInfo.singer))
+  let sourceLabel = $derived(buildSourceLabel(info.musicInfo))
 </script>
 
 <div class="list-item">

@@ -81,13 +81,13 @@
     // }
   }
 
-  if (autofocus) {
-    onMount(() => {
+  onMount(() => {
+    if (autofocus) {
       void tick().then(() => {
         setTimeout(focus, 100)
       })
-    })
-  }
+    }
+  })
 </script>
 
 <input

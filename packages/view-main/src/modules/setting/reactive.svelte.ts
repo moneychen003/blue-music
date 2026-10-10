@@ -25,13 +25,16 @@ export const useSetting = () => {
   }
 }
 
-export const useSettingValue = <T extends keyof AnyListen.AppSetting>(key: T) => {
-  let val = $state.raw(settingState.setting[key])
+export const useSettingValue = <T extends keyof AnyListen.AppSetting>(key: T | (() => T)) => {
+  const getKey = () => (typeof key === 'function' ? key() : key)
+  let val = $state.raw(settingState.setting[getKey()])
 
   $effect(() => {
+    const currentKey = getKey()
+    val = settingState.setting[currentKey]
     const unsub = settingEvent.on('updated', (keys) => {
-      if (!keys.includes(key)) return
-      val = settingState.setting[key]
+      if (!keys.includes(currentKey)) return
+      val = settingState.setting[currentKey]
     })
     return unsub
   })

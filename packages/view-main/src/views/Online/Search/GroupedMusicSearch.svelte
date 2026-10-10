@@ -2,7 +2,7 @@
   import Image from '@/components/base/Image.svelte'
   import Empty from '@/components/material/Empty.svelte'
   import Pagination from '@/components/material/Pagination.svelte'
-  import { buildRequestKey, search } from '@/modules/resource/search/music/actions'
+  import { search } from '@/modules/resource/search/music/actions'
   import { pushRoute, replaceRoute } from '@/modules/resource/actions'
   import { query, type Params } from '@/plugins/routes'
   import { untrack } from 'svelte'
@@ -50,7 +50,7 @@
     $query[urlParamKeyMap.source] ? list.find((s) => s.sId == $query[urlParamKeyMap.source]) : undefined
   )
 
-  let requestParams: unknown[] = []
+  let requestGeneration = 0
   const normalize = (text?: string | null) => text?.replace(/\s+/g, ' ').trim() ?? ''
 
   const buildGroups = (musics: AnyListen.Music.MusicInfoOnline[]) => {
@@ -109,8 +109,7 @@
     const sourceId = activeSource.id
     const keyword = text ?? $query[urlParamKeyMap.query] ?? ''
     listInfo.page = page
-    requestParams = [page, keyword]
-    const requestKey = buildRequestKey(extId, sourceId, page, listInfo.limit, keyword)
+    const generation = ++requestGeneration
     const { promise, total, result } = search(extId, sourceId, keyword, '', page, listInfo.limit)
     listInfo.loading = !result
     listInfo.total = total
@@ -123,7 +122,7 @@
     }
     void promise
       .then((result) => {
-        if (requestKey != buildRequestKey(extId, sourceId, result.page, listInfo.limit, keyword)) return
+        if (generation !== requestGeneration) return
         listInfo.total = result.total
         listInfo.limit = result.limit
         listInfo.page = result.page
@@ -131,13 +130,12 @@
         groups = buildGroups(result.list)
       })
       .catch((err) => {
-        console.log(err)
-        if (requestKey != buildRequestKey(extId, sourceId, page, listInfo.limit, keyword)) return
+        if (generation !== requestGeneration) return
         listInfo.error = true
         groups = []
       })
       .finally(() => {
-        listInfo.loading = false
+        if (generation === requestGeneration) listInfo.loading = false
       })
   }
 
@@ -161,6 +159,7 @@
     untrack(() => {
       handleSearch(page, $query[urlParamKeyMap.query] || '')
     })
+    return () => { ++requestGeneration }
   })
 </script>
 
@@ -211,7 +210,11 @@
         }}
       />
     </div>
-  {:else if !listInfo.loading}
+  {:else if listInfo.loading}
+    <p role="status">正在搜索所选音源…</p>
+  {:else if listInfo.error}
+    <div role="alert"><p>搜索未完成，请重试或切换音源。</p><button type="button" onclick={() => handleSearch(listInfo.page)}>重试</button></div>
+  {:else}
     <Empty />
   {/if}
 </div>

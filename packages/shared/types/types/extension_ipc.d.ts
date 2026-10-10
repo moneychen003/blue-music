@@ -78,6 +78,7 @@ declare namespace AnyListen {
       artist?: string
     }
     interface MusicSearchParams extends CommonListParams {
+      requestId?: string
       name: string
       artist?: string
       albumName?: string

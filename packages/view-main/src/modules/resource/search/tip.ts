@@ -41,7 +41,7 @@ const setCachedListInfo = (extId: string, source: string, keyword: string, promi
         if (index !== -1) {
           cache.keys.splice(index, 1)
         }
-        console.log(error)
+        console.warn('Resource request failed')
         throw error
       })
   )

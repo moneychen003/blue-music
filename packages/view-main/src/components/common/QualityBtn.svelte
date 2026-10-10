@@ -15,7 +15,7 @@
   })
   const qualityOptions: Array<{
     id: AnyListen.Music.Quality
-    labelKey: string
+    labelKey: Parameters<typeof $t>[0]
     short: string
   }> = [
     { id: '128k', labelKey: 'settings.player.music_quality_128k', short: '标准' },

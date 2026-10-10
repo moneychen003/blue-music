@@ -5,6 +5,7 @@ import { exposeWorker } from '../utils/worker'
 import { registerErrorHandler } from './errorHandler'
 import { extensionEvent } from './event'
 import { executeCommand } from './extensionApis/command'
+import { cancelResourceRequestScope, runResourceRequestScope } from './extensionApis/request'
 import { initI18n } from './i18n'
 import { internalExtensionContextState } from './internalExtension/state'
 import {
@@ -153,11 +154,17 @@ const extension = {
   // },
   async resourceAction<T extends keyof AnyListen.IPCExtension.ResourceAction>(
     action: T,
-    params: Parameters<AnyListen.IPCExtension.ResourceAction[T]>[0]
+    params: Parameters<AnyListen.IPCExtension.ResourceAction[T]>[0],
+    requestId?: string
   ): Promise<Awaited<ReturnType<AnyListen.IPCExtension.ResourceAction[T]>>> {
-    const context = internalExtensionContextState.contexts.get(params.extensionId)
-    if (context) return context.context.resourceAction!(action, params)
-    return resourceAction(action, params)
+    return await runResourceRequestScope(requestId, async () => {
+      const context = internalExtensionContextState.contexts.get(params.extensionId)
+      if (context) return context.context.resourceAction!(action, params)
+      return resourceAction(action, params)
+    }) as Awaited<ReturnType<AnyListen.IPCExtension.ResourceAction[T]>>
+  },
+  cancelResourceAction(requestId: string) {
+    cancelResourceRequestScope(requestId)
   },
   async listProviderAction<T extends keyof AnyListen.IPCExtension.ListProviderAction>(
     action: T,

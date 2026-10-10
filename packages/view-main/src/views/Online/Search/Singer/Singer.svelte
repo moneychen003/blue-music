@@ -6,8 +6,3 @@
 </script>
 
 <GroupedMusicSearch {sourceList} mode="singer" />
-
-<style lang="less">
-  .container {
-  }
-</style>

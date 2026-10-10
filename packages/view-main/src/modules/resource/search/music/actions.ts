@@ -1,172 +1,68 @@
-import { musicSearch } from '@/shared/ipc/resource'
+import { cancelMusicSearch, musicSearch } from '@/shared/ipc/resource'
+import { musicState, type ListInfo } from './state'
 
-import { musicState } from './state'
-
-const buildSourceKey = (extId: string, source: string) => `${extId}.${source}`
-const buildSearchKey = (extId: string, source: string, limit: number, text: string) => {
-  return `${extId}.${source}.${limit}.${text}`
-}
+const CACHE_LIMIT = 40
+const CACHE_TTL_MS = 5 * 60_000
 const SEARCH_TIMEOUT_MS = 25_000
-const withSearchTimeout = <T>(promise: Promise<T>) => {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const timeout = new Promise<T>((_, reject) => {
-    timer = setTimeout(() => {
-      reject(new Error('Search request timeout'))
-    }, SEARCH_TIMEOUT_MS)
-  })
-  return Promise.race([promise, timeout]).finally(() => {
-    if (timer) clearTimeout(timer)
-  })
-}
-export const buildRequestKey = (extId: string, source: string, page: number, limit: number, text: string) => {
-  return JSON.stringify({ extId, source, page, limit, text })
-}
+const sourceKey = (extensionId: string, source: string) => JSON.stringify({ extensionId, source })
+let activeRequest: { id: string; key: string } | null = null
+const cancel = (id?: string) => { if (id) void cancelMusicSearch(id).catch(() => {}) }
+export const buildRequestKey = (extId: string, source: string, page: number, limit: number, text: string) => JSON.stringify({ extId, source, page, limit, text })
 export const parseRequestKey = (params: string) => {
-  try {
-    return JSON.parse(params) as { extId: string; source: string; page: number; limit: number; text: string }
-  } catch {
-    return null
-  }
+  try { return JSON.parse(params) as { extId: string; source: string; page: number; limit: number; text: string } }
+  catch { return null }
 }
-
 export const resetListInfo = (extId: string, source: string) => {
-  let listInfo = musicState.lists.get(buildSourceKey(extId, source))
-  if (!listInfo) return
-  listInfo.requestPromise = undefined
-  listInfo.result = undefined
-  listInfo.page = 0
-  listInfo.total = 0
-  listInfo.searchKey = null
-  listInfo.requestKey = null
+  const key = sourceKey(extId, source)
+  cancel(musicState.lists.get(key)?.requestId)
+  musicState.lists.delete(key)
 }
 export const resetAllListInfo = () => {
-  musicState.lists.forEach((listInfo) => {
-    listInfo.requestPromise = undefined
-    listInfo.result = undefined
-    listInfo.page = 0
-    listInfo.total = 0
-    listInfo.searchKey = null
-    listInfo.requestKey = null
+  for (const info of musicState.lists.values()) cancel(info.requestId)
+  musicState.lists.clear()
+}
+export const search = (extensionId: string, source: string, name: string, artist: string, page: number, limit: number): {
+  promise: Promise<AnyListen.IPCResource.MusicListResult>; total: number; result?: AnyListen.IPCResource.MusicListResult
+} => {
+  const key = sourceKey(extensionId, source)
+  const requestKey = JSON.stringify({ extensionId, source, name, artist, page, limit })
+  if (activeRequest && activeRequest.key !== requestKey) cancel(activeRequest.id)
+  if (!name.trim()) return { promise: Promise.resolve({ list: [], total: 0, limit, page }), total: 0 }
+  const cached = musicState.lists.get(key)
+  if (cached?.requestKey === requestKey && cached.requestPromise && Date.now() - (cached.updatedAt ?? 0) < CACHE_TTL_MS) {
+    musicState.lists.delete(key); musicState.lists.set(key, cached)
+    return { promise: cached.requestPromise, total: cached.total, result: cached.result }
+  }
+  cancel(cached?.requestId)
+  const requestId = crypto.randomUUID()
+  activeRequest = { id: requestId, key: requestKey }
+  const info: ListInfo = { page, limit, total: 0, requestKey, searchKey: requestKey, requestId, updatedAt: Date.now() }
+  musicState.lists.delete(key); musicState.lists.set(key, info)
+  while (musicState.lists.size > CACHE_LIMIT) {
+    const oldest = musicState.lists.keys().next().value
+    if (!oldest) break
+    cancel(musicState.lists.get(oldest)?.requestId)
+    musicState.lists.delete(oldest)
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => { cancel(requestId); reject(new Error('搜索超时，请换源或重试')) }, SEARCH_TIMEOUT_MS)
   })
-}
-
-const getCachedListInfo = (
-  extId: string,
-  source: string,
-  page: number,
-  limit: number,
-  text: string
-): [Promise<AnyListen.IPCResource.MusicListResult> | null, number, AnyListen.IPCResource.MusicListResult | undefined] | null => {
-  const listInfo = musicState.lists.get(buildSourceKey(extId, source))
-  if (listInfo) {
-    if (listInfo.requestKey == buildRequestKey(extId, source, page, limit, text)) {
-      return [listInfo.requestPromise!, listInfo.total, listInfo.result]
-    }
-    if (listInfo.searchKey == buildSearchKey(extId, source, limit, text)) {
-      return [null, listInfo.total, undefined]
-    }
-  }
-  return null
-}
-const setCachedListInfo = (
-  extId: string,
-  source: string,
-  page: number,
-  limit: number,
-  text: string,
-  promise: Promise<AnyListen.IPCResource.MusicListResult>
-) => {
-  const sourceKey = buildSourceKey(extId, source)
-  const searchKey = buildSearchKey(extId, source, limit, text)
-  const requestKey = buildRequestKey(extId, source, page, limit, text)
-  let listInfo = musicState.lists.get(sourceKey)
-  if (!listInfo) {
-    listInfo = {
-      page: 0,
-      total: 0,
-      limit,
-      searchKey: null,
-      requestKey: null,
-    }
-    musicState.lists.set(sourceKey, listInfo)
-  }
-  listInfo.searchKey = searchKey
-  listInfo.requestKey = requestKey
-  listInfo.requestPromise = promise
+  const promise = Promise.race([musicSearch({ extensionId, source, name, artist, page, limit, requestId }), timeout])
     .then((result) => {
-      const listInfo = musicState.lists.get(sourceKey)
-      if (listInfo?.requestKey === requestKey) {
-        listInfo.page = page
-        listInfo.limit = limit
-        listInfo.total = result.total
-        listInfo.result = result
+      if (musicState.lists.get(key) === info) {
+        info.result = result; info.total = result.total; info.page = result.page; info.updatedAt = Date.now()
       }
       return result
-    })
-    .catch((error) => {
-      const listInfo = musicState.lists.get(sourceKey)
-      if (listInfo?.requestKey === requestKey) {
-        listInfo.requestPromise = undefined
-        listInfo.result = undefined
-        listInfo.page = 0
-        listInfo.total = 0
-      }
-      console.log(error)
+    }).catch((error: unknown) => {
+      if (musicState.lists.get(key) === info) musicState.lists.delete(key)
       throw error
+    }).finally(() => {
+      clearTimeout(timer)
+      info.requestId = undefined
+      if (activeRequest?.id === requestId) activeRequest = null
     })
+  info.requestPromise = promise
+  return { promise, total: 0 }
 }
-
-export const search = (
-  extensionId: string,
-  source: string,
-  name: string,
-  artist: string,
-  page: number,
-  limit: number
-): {
-  promise: Promise<AnyListen.IPCResource.MusicListResult>
-  total: number
-  result?: AnyListen.IPCResource.MusicListResult
-} => {
-  console.log(extensionId, source, name, artist, page, limit)
-  if (!name.trim().length) {
-    return {
-      promise: Promise.resolve({
-        list: [],
-        total: 0,
-        limit,
-        page,
-      }),
-      total: 0,
-    }
-  }
-  const cacheListInfo = getCachedListInfo(extensionId, source, page, limit, name)
-  if (cacheListInfo?.[0]) {
-    return {
-      promise: cacheListInfo[0],
-      total: cacheListInfo[1],
-      result: cacheListInfo[2],
-    }
-  }
-  const promise = withSearchTimeout(
-    musicSearch({
-      extensionId,
-      source,
-      name,
-      artist,
-      limit,
-      page,
-    })
-  ).then((result) => {
-    console.log(result)
-    return result
-  })
-  setCachedListInfo(extensionId, source, page, limit, name, promise)
-  return {
-    promise,
-    total: cacheListInfo?.[1] ?? 0,
-    result: cacheListInfo?.[2],
-  }
-}
-
 export { findMusic } from '@/shared/ipc/resource'

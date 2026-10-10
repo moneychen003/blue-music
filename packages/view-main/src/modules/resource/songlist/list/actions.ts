@@ -91,7 +91,7 @@ const setCachedListInfo = (
         listInfo.page = 0
         listInfo.total = 0
       }
-      console.log(error)
+      console.warn('Resource request failed')
       throw error
     })
 }
@@ -123,7 +123,7 @@ export const getData = (
     limit,
     page,
   }).then((result) => {
-    console.log(result)
+
     return result
   })
   setCachedListInfo(extensionId, source, page, limit, tag, sort, promise)

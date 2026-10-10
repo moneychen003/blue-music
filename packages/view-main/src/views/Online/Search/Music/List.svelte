@@ -25,8 +25,11 @@
     text: '',
   }
   let requestParams: unknown[] = []
+  let requestGeneration = 0
 
   const handleSearch = (page: number, text?: string) => {
+    if (!source) return
+    const generation = ++requestGeneration
     searchInfo.extId = source!.extensionId
     let extId = searchInfo.extId
     searchInfo.source = source!.id
@@ -48,7 +51,7 @@
     }
     void promise
       .then(({ list: _list, total, limit, page }) => {
-        if (searchId != buildRequestKey(extId, sourceId, page, listInfo.limit, searchInfo.text)) {
+        if (generation !== requestGeneration) {
           return
         }
         if (listInfo.total !== total) listInfo.total = total
@@ -73,15 +76,14 @@
         }
       })
       .catch((err) => {
-        console.log(err)
-        if (searchId != buildRequestKey(extId, sourceId, page, listInfo.limit, searchInfo.text)) {
+        if (generation !== requestGeneration) {
           return
         }
         listInfo.error = true
         list = []
       })
       .finally(() => {
-        listInfo.loading = false
+        if (generation === requestGeneration) listInfo.loading = false
       })
   }
 
@@ -96,6 +98,7 @@
     untrack(() => {
       handleSearch(page, $query[urlParamKeyMap.query] || '')
     })
+    return () => { ++requestGeneration }
   })
 </script>
 

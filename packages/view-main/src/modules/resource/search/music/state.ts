@@ -1,4 +1,6 @@
 export interface ListInfo {
+  updatedAt?: number
+  requestId?: string
   requestPromise?: Promise<AnyListen.IPCResource.MusicListResult>
   result?: AnyListen.IPCResource.MusicListResult
   total: number
